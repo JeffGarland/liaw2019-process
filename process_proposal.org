@@ -75,9 +75,91 @@ Desert Sessions: Improving hostile environment interactions http://wg21.link/p12
 * Use Cases
 * Survey of facilities in other standard libraries
 ** Java
+
+#+BEGIN_SRC java
+
+// ProcessBuilder takes variadic string arguments
+// or a List<String>
+var builder = new ProcessBuilder("/bin/cat", "-");
+
+// start()-method will spawn the process
+// Standard streams are piped automatically
+Process p = builder.start();
+
+// Write into process stdin
+new OutputStreamWriter(p.getOutputStream())
+      .write("foo\n")
+      .close(); // close() needed to flush the buffer
+
+// Read from stdout
+var reader = new BufferedReader(
+      new InputStreamReader(p.getInputStream()));
+String output = reader.readLine();
+
+assert output == "foo";
+
+System.out.println("Exited with " + p.exitValue())
+
+#+END_SRC
+
 ** Python
+
+#+BEGIN_SRC python
+from subprocess import Popen, PIPE
+
+# Command line arguments are all passed in a single list
+# Standard streams aren't piped by default
+child = Popen([ '/bin/cat', '-' ],
+          stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+# communicate() takes input (optional)
+# Waits for process to terminate
+# Handles to standard streams aren't available
+out, err = child.communicate(input='foo\n')
+assert out == 'foo'
+print("Exited with", child.returncode)
+
+#+END_SRC
+
 ** Rust
+
+#+BEGIN_SRC rust
+use std::process::{Command, Stdio};
+
+let mut child = Command("/bin/cat")
+                .arg("-") // .args() also available, taking a range
+                          // strings passed to .arg() are escaped
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()?; // ?-operator is for error handling
+child.stdin.as_mut()?.write_all(b"foo\n")?;
+// .wait_with_output() will, well, wait
+// child.stdout/stderr exposes standard streams directly
+let output = child.wait_with_output()?;
+assert_eq!(b"foo", output.stdout.as_slice());
+println!("Exited with {}", output.status.code.unwrap());
+
+#+END_SRC
+
 ** Nodejs
+
+#+BEGIN_SRC js
+
+const { spawn } = require('child_process');
+
+// First argument is argv[0], rest of argv passed in a list
+const p = spawn('/bin/cat', ['-']);
+p.stdin.write('foo\n');
+// Idiomatic node.js uses callbacks everywhere
+p.stdout.on('data', (data) => {
+  assert.StrictEqual(data, 'foo\n');
+});
+p.on('close', (code) => {
+  console.log(`Exited with ${code}`);
+});
+
+#+END_SRC
+
 ** Fortran
 * Design 
 ** Core language impact
