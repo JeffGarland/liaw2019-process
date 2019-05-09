@@ -1,0 +1,117 @@
+
+#+Revision: 0
+#+Audience: LEWGI
+#+Status: 
+#+Group: WG21
+#+Title: A proposal to add process management to the C++ standard library
+#+Author: 
+#+Email: 
+
+* Revision History
+** Revision 0
+Initial release.
+
+* Introduction
+
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.
+
+The proposal is based on boost.process https://www.boost.org/libs/process which provides cross-platform implementation experience.
+
+* Motivation and Scope
+
+We propose a library to facilitate the following basic functionality:
++    create child processes on current machine
++    setup streams for communication with child std::out and std::err
++    communicate with child processes through streams
++    wait for processes to exit 
++    terminate processes
+
+The following illustrates an example usage of the proposed library. 
+
+#+BEGIN_SRC c++
+
+#include <process>
+
+int main()
+{
+
+  std::process_args args { "--version", "--std=c++2a" };
+
+  try {
+    std::ipstream pipe_stream;
+    std::process child("gcc", args,
+                          std_out > pipe_stream);
+
+    std::string line;
+
+    while (pipe_stream && std::getline(pipe_stream, line) && !line.empty()) 
+    {
+        std::cerr << line << std::endl;
+    }
+    child.wait();
+  }
+  catch(const std::exception& e) 
+  {
+     std::cerr << e.what();
+  }
+}
+
+#+END_SRC
+
+* Terminology
+** Processes
+
+** Process Groups
+
+** Pipes
+
+** Environment and Command Line Arguments
+
+Issue: does windows allow passing the environment at start without altering the parent
+
+Isabella Muerte 
+Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
+
+* Use Cases
+* Survey of facilities in other standard libraries
+** Java
+** Python
+** Rust
+** Nodejs
+** Fortran
+* Design 
+** Core language impact
+Bryce to provide information to Jeff
+** Header <process>
+
+** Start of execution
+Have a run() method versus immdietied in the consructions
+** Using a build method to create
+
+** Handling of parameters
+   There's an issue of escaping the argument properly
+** Native Operating System Handle
+
+The solution provides access to the operating system like std::thread for programmers that which to go beyond the provided facilities.
+
+** Portable callbacks during spawn
+*** onError -- does this change into a non-exception
+*** onSuccess
+*** onSetup
+** EOF on pipe close
+** Security and User Management Implications
+
+** Bikeshed on .wait name
+** Error Handling
+
+** Synchronous Versus Asynchronous
+
+** Integration of iostreams and pipes
+
+* Synopsis 
+* References
++ Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
++ boost.process documentation https://www.boost.org/libs/process 
+
+
+
