@@ -48,7 +48,6 @@ int main()
     {
         std::cerr << line << std::endl;
     }
-    child.wait();
   }
   catch(const std::exception& e) 
   {
@@ -165,10 +164,13 @@ p.on('close', (code) => {
 ** Core language impact
 Bryce to provide information to Jeff
 ** Header <process>
+** Namespace std:: versus std::process
 
-** Start of execution
-Have a run() method versus immdietied in the consructions
-** Using a build method to create
+The classes and functions for this proposal could be put into namespace std:: or sub namespace such as std::process. Process is more similar to thread than filesystem.  Since thread is in namespace std this proposal suggests the same for process.
+
+** Start of execution on process create
+** Using a builder method to create
+Have a run() method versus immediate in the constructor
 
 ** Handling of parameters
    There's an issue of escaping the argument properly
@@ -183,7 +185,6 @@ The solution provides access to the operating system like std::thread for progra
 ** EOF on pipe close
 ** Security and User Management Implications
 
-** Bikeshed on .wait name
 ** Error Handling
 
 ** Synchronous Versus Asynchronous
@@ -191,6 +192,12 @@ The solution provides access to the operating system like std::thread for progra
 ** Integration of iostreams and pipes
 
 * Synopsis 
+* Acknowledgements
+
+This proposal reflects the effort of the c++ community at C++Now 2019. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
+
+None of this would have been possible without the work and guidanc of Klemens Morgenstern, author of boost.process. 
+
 * References
 + Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 + boost.process documentation https://www.boost.org/libs/process 
