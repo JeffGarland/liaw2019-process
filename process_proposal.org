@@ -60,9 +60,25 @@ int main()
 * Terminology
 ** Processes
 
+A process is an instance of a program in execution. A process has at least one thread. A process starts execution in the thread that invokes it's main function.
+
+> Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads?
+
 ** Process Groups
 
 ** Pipes
+
+A pipe is a unidirectional, serial communication line across processes. A pipe has two ends: a write end and a read end.
+
+A pipe is buffered. The size of the buffer is implementation defined. When there's no data in the buffer, the pipe is called empty. When the buffer is full, the pipe is called full.
+
+Reading from an empty pipe is a blocking operation. Writing to a pipe resumes any blocked threads that are waiting to read on that pipe.
+
+Writing to a full pipe is a blocking operation. Reading from a pipe resumes any blocked threads that are writing to that pipe.
+
+If there are multiple threads reading from the same pipe, the order in which they read the data is unspecified.
+
+If there are multiple threads writing to the same pipe, the order in which they write is unspecified.
 
 ** Environment and Command Line Arguments
 
