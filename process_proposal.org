@@ -5,7 +5,7 @@
 #+Group: WG21
 #+Title: A proposal to add process management to the C++ standard library
 #+Author: 
-#+Email: 
+#+Email: jeff@crystalclearsoftware.com
 
 * Revision History
 ** Revision 0
@@ -13,7 +13,7 @@ Initial release.
 
 * Introduction
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.   The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below)
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.   The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below).
 
 The proposal is based on boost.process https://www.boost.org/libs/process which provides cross-platform implementation experience.
 
@@ -48,6 +48,7 @@ int main()
     {
         std::cerr << line << std::endl;
     }
+    child.wait();
   }
   catch(const std::exception& e) 
   {
@@ -62,8 +63,6 @@ int main()
 
 A process is an instance of a program in execution. A process has at least one thread. A process starts execution in the thread that invokes it's main function.
 
-> Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads?
-
 ** Process Groups
 
 ** Pipes
@@ -76,14 +75,17 @@ Reading from an empty pipe is a blocking operation. Writing to a pipe resumes an
 
 Writing to a full pipe is a blocking operation. Reading from a pipe resumes any blocked threads that are writing to that pipe.
 
-If there are multiple threads reading from the same pipe, the order in which they read the data is unspecified.
+If there are multiple threads reading or writing from the same pipe at the same time the order in which they read the data is unspecified.
 
-If there are multiple threads writing to the same pipe, the order in which they write is unspecified.
 
 ** Environment and Command Line Arguments
+This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments.
 
 Isabella Muerte 
 Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
+
+
+From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
 
 * Use Cases
 * Survey of facilities in other standard libraries
@@ -187,7 +189,9 @@ The classes and functions for this proposal could be put into namespace std:: or
 Have a run() method versus immediate in the constructor
 
 ** Handling of parameters
-   There's an issue of escaping the argument properly
+  - There's an issue of escaping the argument properly
+  - see issues below on 1275
+** ~wait~ or ~join~
 ** Native Operating System Handle
 
 The solution provides access to the operating system like std::thread for programmers that which to go beyond the provided facilities.
@@ -206,6 +210,16 @@ The solution provides access to the operating system like std::thread for progra
 ** Integration of iostreams and pipes
 
 * Synopsis 
+* Open Questions
+** if we don't have wait_for can we still detach? 
+** Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads? (Jeff - seems doubtful -- network TS)
+** 1275 also has arguments does this work for our proposal?  The implementation is not complete for 1275. If the R1 has the environment as immutable then it will not work -- process needs to modify. 
+** args are available before main in 1275
+** probably dont need process_args class - vector<string> fine
+#+BEGIN_NOTES
+** 1275 LEWGI in San Diego favorible
+#+END_NOTES
+
 * Acknowledgements
 
 This proposal reflects the effort of the c++ community at C++Now 2019. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
