@@ -13,7 +13,7 @@ Initial release.
 
 * Introduction
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.   The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below)
 
 The proposal is based on boost.process https://www.boost.org/libs/process which provides cross-platform implementation experience.
 
@@ -81,8 +81,6 @@ If there are multiple threads reading from the same pipe, the order in which the
 If there are multiple threads writing to the same pipe, the order in which they write is unspecified.
 
 ** Environment and Command Line Arguments
-
-Issue: does windows allow passing the environment at start without altering the parent
 
 Isabella Muerte 
 Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
@@ -212,11 +210,12 @@ The solution provides access to the operating system like std::thread for progra
 
 This proposal reflects the effort of the c++ community at C++Now 2019. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
 
-None of this would have been possible without the work and guidanc of Klemens Morgenstern, author of boost.process. 
+None of this would have been possible without the work and guidance of Klemens Morgenstern, author of boost.process. 
 
 * References
 + Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 + boost.process documentation https://www.boost.org/libs/process 
++ Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
 
 
 
