@@ -25,6 +25,7 @@ We propose a library to facilitate the following basic functionality:
 +    communicate with child processes through streams
 +    wait for processes to exit 
 +    terminate processes
++    optionally associate the child-process to the parent-child to childeren die with their parents, but not vice-versa.
 
 The following illustrates an example usage of the proposed library. 
 
