@@ -13,19 +13,21 @@ Initial release.
 
 * Introduction
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage child processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.   The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below).
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately C++ does not have a portable way to create and manage processes.  Most other langauge standard libraries support facilities to wrap the complexities in support of application programmers.   The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below).
 
 The proposal is based on boost.process https://www.boost.org/libs/process which provides cross-platform implementation experience.
 
 * Motivation and Scope
 
 We propose a library to facilitate the following basic functionality:
-+    create child processes on current machine
++    create child processes on the current machine
 +    setup streams for communication with child std::out and std::err
 +    communicate with child processes through streams
 +    wait for processes to exit 
 +    terminate processes
-+    optionally associate the child-process to the parent-child to childeren die with their parents, but not vice-versa.
++    capture the return result of a child process
++    manage groups of processes
++    optionally associate the child-process to the parent-child to children die with their parents, but not vice-versa.
 
 The following illustrates an example usage of the proposed library. 
 
@@ -36,12 +38,12 @@ The following illustrates an example usage of the proposed library.
 int main()
 {
 
-  std::process_args args { "--version", "--std=c++2a" };
+  std::vector<std::string> args { "--version", "--std=c++2a" };
 
   try {
     std::ipstream pipe_stream;
     std::process child("gcc", args,
-                          std_out > pipe_stream);
+                              std_out > pipe_stream); //capture std::out
 
     std::string line;
 
@@ -59,15 +61,14 @@ int main()
 
 #+END_SRC
 
-* Terminology
+* Domain Terminology
 ** Processes
-
-A process is an instance of a program in execution. A process has at least one thread. A process starts execution in the thread that invokes it's main function.
+A process is an instance of a program in execution. A process has at least one thread. A process starts execution in the thread that invokes it's main function.  A child process is the result of another process creating or spawning the child. 
 
 ** Process Groups
+Process groups allow for managing a set of processes at the operating system level. This allows behavior such as process termination to be automatically coordinated by the operating system.  For example, child processes in a group can be set to terminate together.
 
 ** Pipes
-
 A pipe is a unidirectional, serial communication line across processes. A pipe has two ends: a write end and a read end.
 
 A pipe is buffered. The size of the buffer is implementation defined. When there's no data in the buffer, the pipe is called empty. When the buffer is full, the pipe is called full.
@@ -78,19 +79,30 @@ Writing to a full pipe is a blocking operation. Reading from a pipe resumes any 
 
 If there are multiple threads reading or writing from the same pipe at the same time the order in which they read the data is unspecified.
 
-
 ** Environment and Command Line Arguments
-This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments.
+Creation of a child process sometimes involves modifying the environment for the child process.  This proposal references a current proposal for referencing a process environment.  However, the proposal in P1275 would need to be enhance to support multiple instances of environments for access and modification of child process environment.
 
-Isabella Muerte 
-Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
-
-
-From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
+Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 
 * Use Cases
 * Survey of facilities in other standard libraries
+** C/C++ system function
+
+C and C++ currently provide a minimal process launching capability via the `system` function. The C++ function takes a =const char*= parameter that represents command string to execute and an integer return code that signifies the execution return status. 
+
+#+BEGIN_SRC c++
+
+  int result = system("echo \"foo\" > bar.txt");
+  if (result == 0) {
+    //do something
+#+END_SRC
+
+This minimal facility lacks many aspects of process control needed for even basic applications including access to the std::err and std::out of the child.
+
+
+
 ** Java
+Java provides a ProcessBuilder and stream piping facilities similar to what is proposed here. 
 
 #+BEGIN_SRC java
 
@@ -109,7 +121,7 @@ new OutputStreamWriter(p.getOutputStream())
 
 // Read from stdout
 var reader = new BufferedReader(
-      new InputStreamReader(p.getInputStream()));
+                  new InputStreamReader(p.getInputStream()));
 String output = reader.readLine();
 
 assert output == "foo";
@@ -138,6 +150,7 @@ print("Exited with", child.returncode)
 #+END_SRC
 
 ** Rust
+As with other languages Rust provides the ability to pipe the results of the process into the parent.
 
 #+BEGIN_SRC rust
 use std::process::{Command, Stdio};
@@ -158,6 +171,7 @@ println!("Exited with {}", output.status.code.unwrap());
 #+END_SRC
 
 ** Nodejs
+Nodejs offers the functionality through a package with similar functions to other langauges.
 
 #+BEGIN_SRC js
 
@@ -175,9 +189,9 @@ p.on('close', (code) => {
 });
 
 #+END_SRC
-
-** Fortran
 * Design 
+** Process Concepts
+
 ** Core language impact
 Bryce to provide information to Jeff
 ** Header <process>
@@ -214,12 +228,14 @@ The solution provides access to the operating system like std::thread for progra
 * Open Questions
 ** if we don't have wait_for can we still detach? 
 ** Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads? (Jeff - seems doubtful -- network TS)
-** 1275 also has arguments does this work for our proposal?  The implementation is not complete for 1275. If the R1 has the environment as immutable then it will not work -- process needs to modify. 
-** args are available before main in 1275
 ** probably dont need process_args class - vector<string> fine
-#+BEGIN_NOTES
-** 1275 LEWGI in San Diego favorible
-#+END_NOTES
+** environment and command line
+*** This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments -- not singleton from 1275
+*** 1275 LEWGI in San Diego voted favoribly
+*** From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
+*** 1275 also has arguments does this work for our proposal?  The implementation is not complete for 1275. If the R1 has the environment as immutable then it will not work -- process needs to modify. 
+*** args are available before main in 1275
+
 
 * Acknowledgements
 
