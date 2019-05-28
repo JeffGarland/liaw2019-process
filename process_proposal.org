@@ -99,7 +99,17 @@ C and C++ currently provide a minimal process launching capability via the `syst
 
 This minimal facility lacks many aspects of process control needed for even basic applications including access to the std::err and std::out of the child.
 
-
+#+BEGIN_SRC c++
+template<typename ...Args>
+inline int system(Args && ... args)
+{
+    std::process c(std::forward<Args>(args)...,);
+    if (!c.valid())
+        return -1;
+    c.wait();
+    return c.exit_code();
+}
+#+END_SRC
 
 ** Java
 Java provides a ProcessBuilder and stream piping facilities similar to what is proposed here. 
@@ -224,7 +234,125 @@ The solution provides access to the operating system like std::thread for progra
 
 ** Integration of iostreams and pipes
 
-* Synopsis 
+* Technical Specification
+** Header ~<process>~ Synopsis
+
+This is a first cut at th wording. We probably don't need to go much deeper in the specification than the synopsis for the first paper.  I (Jeff G) basically lifted this out of boost.process::child and updated.
+
+#+BEGIN_SRC c++
+ 
+namespace std {
+
+   //TODO add Klemens concepts here
+
+   // TODO need to define  pid_t
+
+   // Launches a process and waits for its exit
+   template<typename ...Args>
+   inline int system(Args && ...args);
+
+   //TODO Jeff: I believe we can say that process satisfies SemiRegular -- copyable and default constructable.  It isn't regular bc we can't compare process objects
+
+   //Provides a portable handle to an operating system process
+   class process
+   {
+    public:
+      //provides access to underlying operating system facilities
+      typedef platform_specific native_handle_t; 
+
+      // Construct a child from a property list and launch it
+      template<typename ...Args>
+      explicit process(Args&&...args);
+
+      // Attach to an existing process
+      explicit process(pid_t & pid);
+
+      // TODO jeff g -- what's the use case for default construction?
+      process() = default;
+
+      process(process && lhs);
+      process& operator=(process && lhs);
+ 
+      //TODO Klemens -- I marked this noexcept -- is that a problem?
+      // calls terminate if process is not detached or !running()
+     ~process() noexcept;
+
+      // Accessors 
+
+      pid_t id()      const;
+
+      native_handle_t native_handle() const;
+
+      // return code of the process, only valid if !running()
+      int exit_code() const;
+
+      //see if part of a group
+      bool in_group() const;
+      bool in_group(std::error_code & ec) const noexcept;
+
+      // check if the process is running.
+      bool running();
+      bool running(std::error_code & ec) noexcept;
+
+      /** Check if this handle holds a child process.
+       * @note That does not mean, that the process is still running. It only means, that the handle does or did exist.
+     */
+      bool valid() const;
+      explicit operator bool() const; //equivalent to this->valid()
+
+
+      //Process Management Functions
+
+      // detach a spawned process -- let it run after this handle destructs
+      void detach();
+
+
+      /** Terminate the child process. TODO clean...
+      *
+      *  This function will cause the child process to unconditionally and immediately exit.
+      *  It is implement with [SIGKILL](http://pubs.opengroup.org/onlinepubs/009695399/functions/kill.html) on posix
+      *  and [TerminateProcess](https://technet.microsoft.com/en-us/library/ms686714.aspx) on windows.
+      *
+      */
+     void terminate();
+     void terminate(std::error_code & ec) noexcept;
+
+      // block until the process to exits 
+      void wait();
+      void wait(std::error_code & ec) noexcept;
+
+      // block for the process to exit for a period of time.
+      template< class Rep, class Period >
+      bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time);
+      bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time, std::error_code & ec) noexcept;
+
+      // wait for the process to exit until a point in time.
+      template< class Clock, class Duration >
+      bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time );
+      bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time, std::error_code & ec) noexcept;
+
+    };
+
+
+#+END_SRC
+
+//TODO add additional types here
+
+** Class ~process~
+** Enhanced ~system~ details
+
+#+BEGIN_SRC c++
+template<typename ...Args>
+inline int system(Args && ... args)
+{
+    std::process c(std::forward<Args>(args)...,);
+    if (!c.valid())
+        return -1;
+    c.wait();
+    return c.exit_code();
+}
+#+END_SRC
+
 * Open Questions
 ** if we don't have wait_for can we still detach? 
 ** Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads? (Jeff - seems doubtful -- network TS)
@@ -239,7 +367,7 @@ The solution provides access to the operating system like std::thread for progra
 
 * Acknowledgements
 
-This proposal reflects the effort of the c++ community at C++Now 2019. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
+This proposal reflects the effort of the c++ community at C++Now 2019 and afterward. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
 
 None of this would have been possible without the work and guidance of Klemens Morgenstern, author of boost.process. 
 
