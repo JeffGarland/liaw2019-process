@@ -45,7 +45,7 @@ Anything that contains native_handle (HANDLE* on windows & int on linux) that ca
 
 ## Core function
 
-Launching a process is done by default through the destructor of `std::process`. There are two modes to launch a process in theory: providing a `path` & arguments, OR to provide a command string. The latter will be interpreted by a shell (cmd.exe or /bin/sh). This is considered unsafe (because shell injection), and `std::system` does exactly that at the moment. Point of discussion: does that make sense to provide? Or should be move to deprecate `std::system` since we then would have a process library?
+Launching a process is done by default through the constructor of `std::process`. There are two modes to launch a process in theory: providing a `path` & arguments, OR to provide a command string. The latter will be interpreted by a shell (cmd.exe or /bin/sh). This is considered unsafe (because shell injection), and `std::system` does exactly that at the moment. Point of discussion: does that make sense to provide? Or should be move to deprecate `std::system` since we then would have a process library?
 
 In effect the two are the same in boost::process:
 
