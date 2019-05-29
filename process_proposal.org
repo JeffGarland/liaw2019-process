@@ -332,6 +332,15 @@ namespace std {
 
     };
 
+    // exception thrown on error by throwing overloads
+    struct process_error : public system_error {
+      using system_error::system_error;
+
+      // TODO:
+      // filesystem_error can also take a path relating to the error,
+      // should we take a pid_t as well?
+    };
+
 
 #+END_SRC
 
