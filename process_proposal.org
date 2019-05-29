@@ -306,8 +306,7 @@ namespace std {
       // detach a spawned process -- let it run after this handle destructs
       void detach();
 
-
-      /** Terminate the child process. TODO clean...
+      /** TODO clean... Terminate the child process. 
       *
       *  This function will cause the child process to unconditionally and immediately exit.
       *  It is implement with [SIGKILL](http://pubs.opengroup.org/onlinepubs/009695399/functions/kill.html) on posix
@@ -375,6 +374,6 @@ None of this would have been possible without the work and guidance of Klemens M
 + Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 + boost.process documentation https://www.boost.org/libs/process 
 + Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
-
-
++ cppcast with Klemens on boost.process https://channel9.msdn.com/Shows/CppCast/Episode-72-BoostProcess-with-Klemens-Morgenstern
++ Pacific c++ Klemens on boost.process design https://www.youtube.com/watch?v=uZ4IG1OfeR0
 
