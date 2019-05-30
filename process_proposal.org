@@ -245,7 +245,8 @@ namespace std {
 
    //TODO add Klemens concepts here
 
-   // TODO need to define  pid_t
+   // TODO need to define  pid_type
+   using pid_type = implementation-defined;
 
    // Launches a process and waits for its exit
    template<typename ...Args>
@@ -258,14 +259,14 @@ namespace std {
    {
     public:
       //provides access to underlying operating system facilities
-      typedef platform_specific native_handle_t; 
+      typedef platform_specific native_handle_type; 
 
       // Construct a child from a property list and launch it
       template<typename ...Args>
       explicit process(Args&&...args);
 
       // Attach to an existing process
-      explicit process(pid_t & pid);
+      explicit process(pid_type & pid);
 
       // TODO jeff g -- what's the use case for default construction?
       process() = default;
@@ -279,9 +280,9 @@ namespace std {
 
       // Accessors 
 
-      pid_t id()      const;
+      pid_type id()      const;
 
-      native_handle_t native_handle() const;
+      native_handle_type native_handle() const;
 
       // return code of the process, only valid if !running()
       int exit_code() const;
@@ -338,7 +339,7 @@ namespace std {
 
       // TODO:
       // filesystem_error can also take a path relating to the error,
-      // should we take a pid_t as well?
+      // should we take a pid_type as well?
     };
 
 
