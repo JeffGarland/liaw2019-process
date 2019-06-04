@@ -283,6 +283,7 @@ namespace std {
    
    //Satisfies ProcessInitializer
    class process_limit_handles;
+      
 }
 #+END_SRC
 
@@ -1089,14 +1090,14 @@ public:
     /** Start an asynchronous read.*/
     template<typename MutableBufferSequence,
              typename ReadHandler>
-    DEDUCED async_read_some(
+    implemtation-defined async_read_some(
         const MutableBufferSequence & buffers,
               ReadHandler &&handler);
 
     /** Start an asynchronous write.*/
     template<typename ConstBufferSequence,
              typename WriteHandler>
-    DEDUCED async_write_some(
+    implemtation-defined async_write_some(
         const ConstBufferSequence & buffers,
         WriteHandler && handler);
 
@@ -1106,7 +1107,119 @@ public:
 }
 #+END_SRC
 
+** Header ~<this_process>~ synposis
 
+This header provides information about the current process
+
+#+BEGIN_SRC c++
+
+namespace std::this_process
+{
+
+    using native_handle_type = implementation-defined;
+    using pid_type = implementation-defined;
+    
+    ///Get the process id of the current process.
+    pid_type get_id();
+    ///Get the native handle of the current process.
+    native_handle_type native_handle();
+    
+    
+    class stdio_t
+    {
+    public:
+        native_handle_type in();
+        native_handle_type out();
+        native_handle_type err();
+    };
+    
+    //get the handles for the stdio.
+    stdio_t stdio();
+    
+
+    /**
+     * Get a snapshot of all handles of the process (i.e. file descriptors on posix and handles on windows) of the current process.
+     *
+     * \note This function might not work on certain posix systems.
+     *
+     * \note On Windows version older than windows 8 this function will iterate all the system handles, meaning it might be quite slow.
+     *
+     * \warning This functionality is utterly prone to race conditions, since other threads might open or close handles.
+     *
+     * \return The list of all open handles of the current process
+     */
+    std::vector<native_handle_type> get_handles();
+
+    /** Determines if a given handle is a a stream-handle, i.e. any handle that can be used with read and write functions.
+     * Stream handles include pipes, regular files and sockets.
+     *
+     * \return Indicates if it's a stream handle.
+     */
+    bool is_stream_handle(native_handle_type handle);
+
+
+    //note that this might also be a global object, i.e. this is yet to be defined.
+    namespace environment
+    {
+        using native_environment_type = implementation-defined;
+        native_environment_type native_environment();
+    
+        using value_type = entry;
+        using key_type      = implementation-defined; //note that windows uses wchar_t here, the key type should be able to be constructed from a char* though. So it needs to be similar to filesystem::path
+        using pointer       = implementation-defined;
+        
+        value_type  get(const key_type & id);
+        void        set(const key_type & id, const value_type & value);
+        void      reset(const key_type & id);
+    
+        //get all the keys
+        Range<key_type> keys() const;
+        
+        //Utility functions to query common values
+        
+        //Home folder 
+        std::filesystem::path home() const;
+        //Temporary folder as defined in the env
+        std::filesystem::path temp() const;
+        
+        //Shell command, see ComSpec for windows
+        std::filesystem::path shell() const;
+        
+        //the path variable, parsed.
+        std::vector<std::filesystem::path> path() const;
+        
+        //the path extensions, that marka file as executable (empty on posix)
+        std::vector<std::filesystem::path> extensions() const;
+    
+        //Find an executable file with this name.
+        std::filesystem::path find_executable(const std::string& name);
+        
+        entry
+        {
+            entry();
+            entry(const entry &);
+            entry(entry &&);
+        
+            entry& operator=(const entry &);
+            entry& operator=(entry &&);
+            
+            using value_type = implementation-defined;
+            
+            std::string string();
+            std::wstring wstring();
+            value_type native_string();
+            
+            std::vector<value_type> as_vector(); //split according to the OS specifics
+            
+            entry& operator=(const std::string  &);
+            entry& operator=(const std::wstring &);
+            
+            entry& operator=(const std::vector<value_type>  &);
+        };
+    }
+}
+
+#+END_SRC
 
 * Open Questions
 ** if we don't have wait_for can we still detach? 
