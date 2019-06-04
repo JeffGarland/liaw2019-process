@@ -1,4 +1,5 @@
 
+
 #+Revision: 0
 #+Audience: LEWGI
 #+Status: 
@@ -42,8 +43,7 @@ int main()
 
   try {
     std::ipstream pipe_stream;
-    std::process child("gcc", args,
-                              std_out > pipe_stream); //capture std::out
+    std::process child("gcc", args, std::proccess_io({}, pipe_stream, {})); //capture std::out, leave the others as the OS defaults
 
     std::string line;
 
@@ -80,6 +80,7 @@ Writing to a full pipe is a blocking operation. Reading from a pipe resumes any 
 If there are multiple threads reading or writing from the same pipe at the same time the order in which they read the data is unspecified.
 
 ** Environment and Command Line Arguments
+
 Creation of a child process sometimes involves modifying the environment for the child process.  This proposal references a current proposal for referencing a process environment.  However, the proposal in P1275 would need to be enhance to support multiple instances of environments for access and modification of child process environment.
 
 Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
@@ -243,111 +244,249 @@ This is a first cut at th wording. We probably don't need to go much deeper in t
  
 namespace std {
 
-   //TODO add Klemens concepts here
+   //A launcher is an object that has a launch function that takes a path, arguments and a variadic list of process initializers and returns a process object. 
+   template<typename T>
+   concept bool ProcessLauncher = requires(T launcher) {
+           {launcher.set_error(error_code(), "message")} -> void; //so initializers can post internal errors
+           {launcher.launch(filesystem::path(), vector<string>())} -> process; //refine that so check tha parameter list, good enough for now.
+   };
+   
+   //An initializer is an object that changes the behavior of a process during launch and thus listens to at least one of the hooks of the launcher. 
+   //Note that the following example only uses portable hooks, but non portables might suffic as well
+   template<typename Init, ProcessLauncher Launcher = process_launcher>
+   concept bool ProcessInitializer =
+           requires(Init initializer, Launcher launcher) { {initializer.on_setup(launcher)}   -> void;}
+        || requires(Init initializer, Launcher launcher) { {initializer.on_success(launcher)} -> void; }
+        || requires(Init initializer, Launcher launcher) { {initializer.on_error(launcher, error_code())} -> void; };
+   }
 
-   // TODO need to define  pid_type
+   // A Pid type is an identifier for a process, that satisfies StrictTotallyOrdered
    using pid_type = implementation-defined;
+   
 
-   // Launches a process and waits for its exit
-   template<typename ...Args>
-   inline int system(Args && ...args);
-
-   //TODO Jeff: I believe we can say that process satisfies SemiRegular -- copyable and default constructable.  It isn't regular bc we can't compare process objects
+   //Process satisfies Movable & Boolean, but not Copyable.
 
    //Provides a portable handle to an operating system process
-   class process
-   {
-    public:
-      //provides access to underlying operating system facilities
-      typedef platform_specific native_handle_type; 
+   class process;
+   
+   //Provides a portable wrapper for a process group
+   class process_group;
+   
+   //Provides an initializers for the standard io. Alternative: nested as std::process::io
+   class process_io;
+   
+   //Provides a way to set the starting directory of the new process.  Alternative: nested as std::process::start_dir
+   class process_start_dir;
 
-      // Construct a child from a property list and launch it
-      template<typename ...Args>
-      explicit process(Args&&...args);
-
-      // Attach to an existing process
-      explicit process(pid_type & pid);
-
-      // TODO jeff g -- what's the use case for default construction?
-      process() = default;
-
-      process(process && lhs);
-      process& operator=(process && lhs);
- 
-      //TODO Klemens -- I marked this noexcept -- is that a problem?
-      // calls terminate if process is not detached or !running()
-     ~process() noexcept;
-
-      // Accessors 
-
-      pid_type id()      const;
-
-      native_handle_type native_handle() const;
-
-      // return code of the process, only valid if !running()
-      int exit_code() const;
-
-      //see if part of a group
-      bool in_group() const;
-      bool in_group(std::error_code & ec) const noexcept;
-
-      // check if the process is running.
-      bool running();
-      bool running(std::error_code & ec) noexcept;
-
-      /** Check if this handle holds a child process.
-       * @note That does not mean, that the process is still running. It only means, that the handle does or did exist.
-     */
-      bool valid() const;
-      explicit operator bool() const; //equivalent to this->valid()
-
-
-      //Process Management Functions
-
-      // detach a spawned process -- let it run after this handle destructs
-      void detach();
-
-      /** TODO clean... Terminate the child process. 
-      *
-      *  This function will cause the child process to unconditionally and immediately exit.
-      *  It is implement with [SIGKILL](http://pubs.opengroup.org/onlinepubs/009695399/functions/kill.html) on posix
-      *  and [TerminateProcess](https://technet.microsoft.com/en-us/library/ms686714.aspx) on windows.
-      *
-      */
-     void terminate();
-     void terminate(std::error_code & ec) noexcept;
-
-      // block until the process to exits 
-      void wait();
-      void wait(std::error_code & ec) noexcept;
-
-      // block for the process to exit for a period of time.
-      template< class Rep, class Period >
-      bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time);
-      bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time, std::error_code & ec) noexcept;
-
-      // wait for the process to exit until a point in time.
-      template< class Clock, class Duration >
-      bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time );
-      bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time, std::error_code & ec) noexcept;
-
-    };
-
-    // exception thrown on error by throwing overloads
-    struct process_error : public system_error {
-      using system_error::system_error;
-
-      // TODO:
-      // filesystem_error can also take a path relating to the error,
-      // should we take a pid_type as well?
-    };
-
-
+}
 #+END_SRC
 
-//TODO add additional types here
 
 ** Class ~process~
+
+#+BEGIN_SRC c++
+class process
+{
+  public:
+    //provides access to underlying operating system facilities
+    typedef platform_specific native_handle_type; 
+
+    // Construct a child from a property list and launch it.
+    template<ProcessInitializer ...Inits>
+    explicit process(const std::filesystem::path & exe, const Range<std::string> & args, Inits&&...inits);
+
+    // Construct a child from a property list and launch it with a custom process launcher
+    template<ProcessInitializer ...Inits, ProcessLauncher Launcher>
+    explicit process(const std::filesystem::path & exe, const Range<std::string> & args, Inits&&...inits, Launcher && launcher);
+
+
+    // Attach to an existing process
+    explicit process(pid_type & pid);
+
+    // An empty process is similar to a default constructed thread. It holds an empty handle and is a place holder for a process that is to be launched later.
+    process() = default;
+
+    process(process && lhs);
+    process& operator=(process && lhs);
+ 
+    
+    // The destructor terminates 
+    ~process();
+
+    // Accessors 
+
+    pid_type id()      const;
+
+    native_handle_type native_handle() const;
+
+    // return code of the process, only valid if !running()
+    int exit_code() const;
+
+
+    // check if the process is running. If the process has exited already, it might store the exit_code internally.
+    bool running() const;
+
+    /** Check if this handle holds a child process.
+     * @note That does not mean, that the process is still running. It only means, that the handle does or did exist.
+    */
+    bool valid() const;
+    explicit operator bool() const; //equivalent to this->valid()
+
+
+    //Process Management Functions
+
+    // detach a spawned process -- let it run after this handle destructs
+    void detach();
+
+    /** TODO clean... Terminate the child process. 
+    *
+    *  This function will cause the child process to unconditionally and immediately exit.
+    *  It is implement with [SIGKILL](http://pubs.opengroup.org/onlinepubs/009695399/functions/kill.html) on posix
+    *  and [TerminateProcess](https://technet.microsoft.com/en-us/library/ms686714.aspx) on windows.
+    *
+    */
+    void terminate();
+
+    // block until the process to exits 
+    void wait();
+
+    // block for the process to exit for a period of time.
+    template< class Rep, class Period >
+    bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time);
+
+    // wait for the process to exit until a point in time.
+    template< class Clock, class Duration >
+    bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time );
+    
+    //The following is dependent on the networking TS. CompletionToken has the signature (int, std::error_code), i.e. wait for the process to exit and get the exit_code if exited. 
+    template<class CompletionToken>
+    DEDUCED async_wait(std::io_context & ctx, CompletionToken&& token);
+};
+#+END_SRC
+
+** Class ~process_group~
+
+#+BEGIN_SRC c++
+class process_group
+{
+  public:
+    //provides access to underlying operating system facilities
+    typedef platform_specific native_handle_type; 
+
+    process_group() = default;
+
+    process_group(process_group && lhs);
+    process_group& operator=(process_group && lhs);
+ 
+    
+    // The destructor terminates all processes in the group
+    ~process_group();
+
+    native_handle_type native_handle() const;
+
+
+    // check if at least one process of the group is running
+    bool running() const;
+
+    /** Check if this handle holds a process group.
+     * @note That does not mean, that the process is still running. It only means, that the handle does or did exist.
+    */
+    bool valid() const;
+    explicit operator bool() const; //equivalent to this->valid()
+
+
+    //Process Management Functions
+
+    // detach a process group -- let it run after this handle destructs
+    void detach();
+
+    /** TODO clean... Terminate all the child processes. 
+    *
+    *  This function will cause the child process to unconditionally and immediately exit.
+    *  It is implement with [SIGKILL](http://pubs.opengroup.org/onlinepubs/009695399/functions/kill.html) on posix
+    *  and [TerminateProcess](https://technet.microsoft.com/en-us/library/ms686714.aspx) on windows.
+    *
+    */
+    void terminate();
+
+    // block until all processes exit
+    void wait();
+
+    // block until one process exit - note that windows does not yield information on which process exited.
+    void wait_one();
+
+
+    // block for all processes to exit for a period of time.
+    template< class Rep, class Period >
+    bool wait_for  (const std::chrono::duration<Rep, Period>& rel_time);
+
+    // block for one process to exit for a period of time.
+    template< class Rep, class Period >
+    bool wait_for_one(const std::chrono::duration<Rep, Period>& rel_time);
+
+
+    // wait for all processes to exit until a point in time.
+    template< class Clock, class Duration >
+    bool wait_until(const std::chrono::time_point<Clock, Duration>& timeout_time );
+    
+
+    // wait for one process to exit until a point in time.
+    template< class Clock, class Duration >
+    bool wait_until_one(const std::chrono::time_point<Clock, Duration>& timeout_time );
+    
+    //The following is dependent on the networking TS. CompletionToken has the signature (std::error_code) and waits for all processes to exit
+    template<class CompletionToken>
+    DEDUCED async_wait(std::io_context & ctx, CompletionToken&& token);
+
+    //The following is dependent on the networking TS. CompletionToken has the signature (std::error_code) and waits for one process
+    template<class CompletionToken>
+    DEDUCED async_wait_one(std::io_context & ctx, CompletionToken&& token);
+
+};
+#+END_SRC
+
+** Class ~process_io~
+
+#+BEGIN_SRC c++
+//satisfieds ProcessInitializer
+/** This class describes I/O redirection for the standard-handles (stdin, stdout, stderr). They all are to be set, because windows either inherits all or all need ot be set. 
+*/
+class process_io
+{
+  //OS dependent handle type
+  using native_handle * implementation-defined;
+  
+  struct  in_default { /* implementation-defined */ };
+  struct out_default { /* implementation-defined */ };
+  struct err_default { /* implementation-defined */ };
+  //construct 
+  template<typename In = in_default, typename Out = out_default, typename Err = err_default> 
+  /* requires In to be ReadableStream, Out & Err to be WritableStream. 
+  This is to be defined, but should allow any stream that can yield a system-handle (e.g. pipes, files & sockets) and to close the stream by passing nullptr. 
+  Additionally a path should be possible to open a file just for the child process.
+  */  
+  process_io(In && in, Out && out, Err && err);
+  
+  /* Rest is implemtation defined */
+};
+#+END_SRC
+
+** Class ~process_start_dir~
+
+#+BEGIN_SRC c++
+//satisfieds ProcessInitializer
+/** This class the starting directory for the child process.
+*/
+class process_start_dir
+{
+  //Construct the initializer
+  process_start_dir(const std::filesyste::path &);
+ 
+};
+#+END_SRC
+
+
+
 ** Enhanced ~system~ details
 
 #+BEGIN_SRC c++
@@ -362,10 +501,31 @@ inline int system(Args && ... args)
 }
 #+END_SRC
 
+** Extension of ~fstream~ 
+
+The fstream/ofstream/ifstream classes shall have a member function that return the native handle of the opened file. (so process can use those for forwarding)
+
+#+BEGIN_SRC c++
+class fstream
+{
+/*....*/
+public:
+    typedef platform_specific native_handle_type; 
+    native_handle_type native_handle() const;
+};
+#+END_SRC
+
+
 * Open Questions
 ** if we don't have wait_for can we still detach? 
+
+Yes.
+
 ** Can we piggyback on the thread's forward progress stuff for process as well? Can we assume all threads on the system behave like C++ threads? (Jeff - seems doubtful -- network TS)
 ** probably dont need process_args class - vector<string> fine
+
+Yes. Range<string> would be better I (Klemens) think, so we can also use std::initializer_list<std::string> as in {"foo", "bar"}
+
 ** environment and command line
 *** This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments -- not singleton from 1275
 *** 1275 LEWGI in San Diego voted favoribly
