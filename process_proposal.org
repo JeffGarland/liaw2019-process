@@ -278,8 +278,11 @@ namespace std {
    //Provides a way to set the starting directory of the new process.  Alternative: nested as std::process::start_dir
    class process_start_dir;
 
-   //Satisfies ProcessInitializers
+   //Satisfies ProcessInitializer
    class environment;
+   
+   //Satisfies ProcessInitializer
+   class process_limit_handles;
 }
 #+END_SRC
 
@@ -452,7 +455,7 @@ class process_group
 ** Class ~process_io~
 
 #+BEGIN_SRC c++
-//satisfieds ProcessInitializer
+//Satisfies ProcessInitializer
 /** This class describes I/O redirection for the standard-handles (stdin, stdout, stderr). They all are to be set, because windows either inherits all or all need ot be set. 
 */
 class process_io
@@ -478,7 +481,7 @@ class process_io
 ** Class ~process_start_dir~
 
 #+BEGIN_SRC c++
-//satisfieds ProcessInitializer
+//Satisfies ProcessInitializer
 /** This class the starting directory for the child process.
 */
 class process_start_dir
@@ -491,7 +494,7 @@ class process_start_dir
 
 ** Class ~environment~
 
-This header provides an environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies ProcessInitializers
+An environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies ProcessInitializers
 
 #+BEGIN_SRC c++
 
@@ -563,6 +566,25 @@ class environment::entry
     entry& operator=(const std::wstring &);
     
     entry& operator=(const std::vector<value_type>  &);
+};
+
+#+END_SRC
+
+** Class ~process_limit_handles~
+
+This limit_handles property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on posix after the fork and removes the inherit flags on windows.
+
+Since limit also closes the standard handles unless they are explicitly redirected they can be ignored by `limit_handles`, though passing in `this_process::stdio()`.
+
+
+#+BEGIN_SRC c++
+
+//Satisfies ProcessInitializers
+class process_limit_handles
+{
+    //Select all the handles that should be inherited even though they are not used by any initializer.
+    template<typename ...Handles>
+    process_limit_handles(Handles && ... handles);
 };
 
 #+END_SRC
