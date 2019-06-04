@@ -85,6 +85,8 @@ Creation of a child process sometimes involves modifying the environment for the
 
 Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 
+This proposal currently contains a synposis of similar function.
+
 * Use Cases
 * Survey of facilities in other standard libraries
 ** C/C++ system function
@@ -99,6 +101,8 @@ C and C++ currently provide a minimal process launching capability via the `syst
 #+END_SRC
 
 This minimal facility lacks many aspects of process control needed for even basic applications including access to the std::err and std::out of the child.
+
+In addition it uses the system-shell to interpret the command, which is a huge security hazard because of shell injection.
 
 #+BEGIN_SRC c++
 template<typename ...Args>
@@ -214,6 +218,20 @@ The classes and functions for this proposal could be put into namespace std:: or
 ** Using a builder method to create
 Have a run() method versus immediate in the constructor
 
+This is solved through the extended launcher concept. 
+
+#+BEGIN_SRC c++
+
+//those are the same:
+process(...) : process(process_launcher.launch(...)) {}
+process_launcher().launch(...) -> process;
+
+//those are the same:
+process(..., custom_launcher & cl) : process(cl.launch) {}
+cl.launch(...);
+
+#+END_SRC
+
 ** Handling of parameters
   - There's an issue of escaping the argument properly
   - see issues below on 1275
@@ -223,17 +241,43 @@ Have a run() method versus immediate in the constructor
 The solution provides access to the operating system like std::thread for programmers that which to go beyond the provided facilities.
 
 ** Portable callbacks during spawn
-*** onError -- does this change into a non-exception
-*** onSuccess
-*** onSetup
+*** on_error
+
+On error passes an std::error_code to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
+
+*** on_success
+*** on_setup
 ** EOF on pipe close
+
+Is automatically delivered by the OS. 
+
 ** Security and User Management Implications
+
+std::system is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing `std::this_process::environment::shell()`.
+
+The standard process library does not tough on user management, though it can be extended to support it.
+
+** Extensibility
+
+To be extensible this library uses two concepts: the ProcessLauncher and the ProcessInitializer.
+
+The ProcessLauncher is the actual function creating the process. It can be used to provide platform dependent behaviour such as launching a process a new user (Using CreateProcessAsUser on windows) or to use vfork on linux. The vendor can thus just provide a launcher, the user can then just drop into his code.
+
+The ProcessInitializer allows minor additions, that just manipulate the process. E.g. on windows to set a `SHOW_WINDOW` flag, or on linux to change the user with `setuid`.
+
+None of this functionality should be built into the library, yet not having those customization points would greatly limit the applicability of this library.
 
 ** Error Handling
 
+Only done by exceptions for now.
+
 ** Synchronous Versus Asynchronous
 
+Synchronous is very prone to deadlocks.
+
 ** Integration of iostreams and pipes
+
+Pipes bring their own streams, that can be used within on process (e.g. between threads).
 
 * Technical Specification
 ** Header ~<process>~ Synopsis
@@ -1232,6 +1276,9 @@ Yes.
 Yes. Range<string> would be better I (Klemens) think, so we can also use std::initializer_list<std::string> as in {"foo", "bar"}
 
 ** environment and command line
+
+Command line is ignored for now. This is a huge shell injection issue and takes a developer like 2 min. to use std::this_process::environment::shell(). Could be done as a custom launcher.
+
 *** This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments -- not singleton from 1275
 *** 1275 LEWGI in San Diego voted favoribly
 *** From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
