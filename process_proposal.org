@@ -278,6 +278,8 @@ namespace std {
    //Provides a way to set the starting directory of the new process.  Alternative: nested as std::process::start_dir
    class process_start_dir;
 
+   //Satisfies ProcessInitializers
+   class environment;
 }
 #+END_SRC
 
@@ -487,7 +489,83 @@ class process_start_dir
 };
 #+END_SRC
 
+** Class ~environment~
 
+This header provides an environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies ProcessInitializers
+
+#+BEGIN_SRC c++
+
+//Satisfies ProcessInitializers
+class environment
+{
+public:
+    using native_environment_type = implementation-defined;
+    
+    native_environment_type native_environment();
+
+    //empty environment
+    environment();
+    
+    //construct from a native type, so the current environment can be cloned
+    environment(native_environment_type native_environment); 
+    
+    class entry;
+    
+    using value_type = entry;
+    using key_type      = implementation-defined; //note that windows uses wchar_t here, the key type should be able to be constructed from a char* though. So it needs to be similar to filesystem::path
+    using pointer       = implementation-defined;
+    
+    value_type  get(const key_type & id);
+    void        set(const key_type & id, const value_type & value);
+    void      reset(const key_type & id);
+
+    //get all the keys
+    Range<key_type> keys() const;
+    
+    //Utility functions to query common values
+    
+    //Home folder 
+    std::filesystem::path home() const;
+    //Temporary folder as defined in the env
+    std::filesystem::path temp() const;
+    
+    //Shell command, see ComSpec for windows
+    std::filesystem::path shell() const;
+    
+    //the path variable, parsed.
+    std::vector<std::filesystem::path> path() const;
+    
+    //the path extensions, that marka file as executable (empty on posix)
+    std::vector<std::filesystem::path> extensions() const;
+
+    //Find an executable file with this name.
+    std::filesystem::path find_executable(const std::string& name);
+};
+
+class environment::entry
+{
+    entry();
+    entry(const entry &);
+    entry(entry &&);
+
+    entry& operator=(const entry &);
+    entry& operator=(entry &&);
+    
+    using value_type = implementation-defined;
+    
+    std::string string();
+    std::wstring wstring();
+    value_type native_string();
+    
+    std::vector<value_type> as_vector(); //split according to the OS specifics
+    
+    entry& operator=(const std::string  &);
+    entry& operator=(const std::wstring &);
+    
+    entry& operator=(const std::vector<value_type>  &);
+};
+
+#+END_SRC
 
 ** Enhanced ~system~ details
 
@@ -989,14 +1067,14 @@ public:
     /** Start an asynchronous read.*/
     template<typename MutableBufferSequence,
              typename ReadHandler>
-    detail::dummy async_read_some(
+    DEDUCED async_read_some(
         const MutableBufferSequence & buffers,
               ReadHandler &&handler);
 
     /** Start an asynchronous write.*/
     template<typename ConstBufferSequence,
              typename WriteHandler>
-    detail::dummy async_write_some(
+    DEDUCED async_write_some(
         const ConstBufferSequence & buffers,
         WriteHandler && handler);
 
