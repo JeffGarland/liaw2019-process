@@ -374,6 +374,9 @@ class process
     // return code of the process, only valid if !running()
     int exit_code() const;
 
+    // return the system native exit code. That is on linux it contains the reason of the exit, such as can be detected by WIFSIGNALED 
+    int native_exit_code() const;
+
 
     // check if the process is running. If the process has exited already, it might store the exit_code internally.
     bool running() const;
@@ -389,6 +392,7 @@ class process
 
     // detach a spawned process -- let it run after this handle destructs
     void detach();
+
 
     /** TODO clean... Terminate the child process. 
     *
