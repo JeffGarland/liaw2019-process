@@ -330,6 +330,12 @@ namespace std {
    
    //Satisfies ProcessInitializer
    class process_limit_handles;
+   
+   
+   //Inherits std::system_error
+   /** Can have a a std::filesystem::path attached to it, when failing before launch, or a pid_t after launch.
+   */
+   class process_error;
       
 }
 #+END_SRC
@@ -1263,6 +1269,11 @@ namespace std::this_process
             entry();
             entry(const entry &);
             entry(entry &&);
+            
+            entry(const std::string  &);
+            entry(const std::wstring &);
+            
+            entry(const std::vector<value_type>  &);
         
             entry& operator=(const entry &);
             entry& operator=(entry &&);
