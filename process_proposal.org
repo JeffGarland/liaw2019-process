@@ -295,6 +295,9 @@ namespace std {
            {launcher.launch(filesystem::path(), vector<string>())} -> process; //refine that so check tha parameter list, good enough for now.
    };
    
+   //The default process-launcher of the impementation
+   class process_launcher;
+   
    //An initializer is an object that changes the behavior of a process during launch and thus listens to at least one of the hooks of the launcher. 
    //Note that the following example only uses portable hooks, but non portables might suffic as well
    template<typename Init, ProcessLauncher Launcher = process_launcher>
@@ -330,7 +333,6 @@ namespace std {
       
 }
 #+END_SRC
-
 
 ** Class ~process~
 
