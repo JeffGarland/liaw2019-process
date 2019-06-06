@@ -410,7 +410,7 @@ class process
     
     //The following is dependent on the networking TS. CompletionToken has the signature (int, std::error_code), i.e. wait for the process to exit and get the exit_code if exited. 
     template<class CompletionToken>
-    DEDUCED async_wait(std::io_context & ctx, CompletionToken&& token);
+    DEDUCED async_wait(std::net::Executor & ctx, CompletionToken&& token);
 };
 #+END_SRC
 
@@ -488,11 +488,11 @@ class process_group
     
     //The following is dependent on the networking TS. CompletionToken has the signature (std::error_code) and waits for all processes to exit
     template<class CompletionToken>
-    DEDUCED async_wait(std::io_context & ctx, CompletionToken&& token);
+    DEDUCED async_wait(std::net::Executor & ctx, CompletionToken&& token);
 
     //The following is dependent on the networking TS. CompletionToken has the signature (std::error_code) and waits for one process
     template<class CompletionToken>
-    DEDUCED async_wait_one(std::io_context & ctx, CompletionToken&& token);
+    DEDUCED async_wait_one(std::net::Executor & ctx, CompletionToken&& token);
 
 };
 #+END_SRC
@@ -1045,18 +1045,18 @@ public:
      */
 
     /** Construct a new async_pipe, does automatically open the pipe.
-     * Initializes source and sink with the same io_context.
+     * Initializes source and sink with the same net::Executor.
      * @note Windows creates a named pipe here, where the name is automatically generated.
      */
-    inline async_pipe(std::io_context & ios);
+    inline async_pipe(std::net::Executor & ios);
 
 
     /** Construct a new async_pipe, does automatically open.
-     * Initializes source and sink with the same io_context.
+     * Initializes source and sink with the same net::Executor.
      *
      * @note Windows restricts possible names.
      */
-    inline async_pipe(std::io_context & ios, const std::string & name);
+    inline async_pipe(std::net::Executor & ios, const std::string & name);
 
     /** Copy-Constructor of the async pipe.
      * @note Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
@@ -1073,7 +1073,7 @@ public:
      *
      */
     template<class CharT, class Traits = std::char_traits<CharT>>
-    explicit async_pipe(std::io_context & ios, const basic_pipe<CharT, Traits> & p);
+    explicit async_pipe(std::net::Executor & ios, const basic_pipe<CharT, Traits> & p);
 
 
 
