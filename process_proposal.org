@@ -1584,6 +1584,70 @@ std::process proc("./foo", {}, std::process_io(std::process_io::null(), std::pro
 
 #+END_SRC
 
+** Class ~environment~
+
+*** ~operator[]~
+
+Unlike Muerte's proposal, ours does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of windows. However, both maybe defined on windows. This can cause a problem:
+
+#+BEGIN_SRC c++
+std::environment env = std::this_process::environment::native_environment();
+
+//let's say it's "Path", but we expect "PATH"
+env["PATH"].add_value("C:\\python");
+std::process proc (env.find_executable("python"), {"./my_script.py"}, env); //error -> python not found or ambiguity error.
+
+#+END_SRC
+
+If we however have it explicitly, things are more obvious.
+
+#+BEGIN_SRC c++
+std::string to_upper(const std::string & in); //implement a conversion to upper case here
+
+auto keys = env.keys(); 
+auto path_key = std::find_if(keys.begin(), keys.end(), [](auto & str) {return to_upper(str) == "PATH";});
+
+auto entry = env.get(path_key); 
+
+auto val = entry.as_vector();
+val.push_back("C:\\python");
+env.set(path_key, val);
+
+#+END_SRC
+
+*** Function ~environment::home()~
+
+This should be it's own function, because it is one value on posix (~"HOME"~) but two on windows (~"HOME_DRIVE"~, ~"HOME_DIR"~).
+
+*** Function ~environment::extensions~
+
+This environment variable is only used on systems that use file extensions to determine executables (i.e. windows).
+
+#+BEGIN_SRC
+//assume /home/hello_world.py is the executable and "/home" is in PATH already --> It's names hello_world on linux, hello_world.py on windows.
+std::environment env = std::this_process::environment::native_environment();
+auto extensions = env.extensions();
+
+std::process proc;
+
+if (std::find(extensions.begin(), extensions.end(), ".py")) //we can use find_executable -> on linux only if the file does not have the syntax. This is in accordance with the shell rules
+    proc = std::process(env.find_executable("hello_world"), {});
+else
+    proc = std::process("/home/hello_world.py", {});
+
+#+END_SRC
+
+*** Function ~environment::find_executable~
+
+This function shall find an executable with the name. if the OS uses file extensions it shall compare those, if not it shall check the executable flag.
+
+#+BEGIN_SRC
+
+auto pt = std::this_process::environment::find_executable("readme.txt"); //finds a file, but is not executable
+assert(pt.empty());
+
+#+END_SRC
+
 * Open Questions
 ** if we don't have wait_for can we still detach? 
 
