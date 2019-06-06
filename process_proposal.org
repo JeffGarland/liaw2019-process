@@ -450,8 +450,22 @@ class process_group
     bool valid() const;
     explicit operator bool() const; //equivalent to this->valid()
 
-
     //Process Management Functions
+
+    
+    //Emplace a process into the group, i.e. launch it attached to the group
+    template<ProcessInitializer ...Inits>
+    pid_t emplace(const std::filesystem::path & exe, const Range<std::string> & args, Inits&&...inits);
+
+    //Emplace a process into the group, i.e. launch it attached to the group with a custom process launcher
+    template<ProcessInitializer ...Inits, ProcessLauncher Launcher>
+    pid_t emplace(const std::filesystem::path & exe, const Range<std::string> & args, Inits&&...inits, Launcher && launcher);
+
+    //Attach an existing process to the group. The process object will be empty afterwads
+    pid_t attach(std::proces && proc);
+
+    //Take a process out of the group
+    std::process [[nodiscard]] detach(pid_t);
 
     // detach a process group -- let it run after this handle destructs
     void detach();
@@ -1426,6 +1440,55 @@ auto fut = proc.async_wait(exec, std::net::use_future_t());
 const exit_code = fut.get();
 assert(exit_code == proc.exit_code());
 #+END_SRC
+
+** Class ~process_group~
+
+The process group can be used for managing several processes at once. Because of the underlying implementation on the OS, there is no guarantee that the exit-code for a process can be obtained. Because of this the `wait_one` and related functions do not yield the exit_code or pid. To make workaround easy, the launch function returns the pid, so a user can write his own code.
+
+*** Example: Attaching a debugger to a process and grouping them.
+
+#+BEGIN_SRC c++
+
+std::process_group grp;
+
+auto pid_target = grp.emplace("./my_proc", {});
+auto pid_gdb = grp.emplace("/usr/bin/gdb", {-p, std::to_string(pid_target)});
+//do something
+
+//kill gdb and use the process individually:
+
+grp.detach(pid_gdb).terminate();
+std::process target = grp.detach(pid_target); 
+
+#+END_SRC
+
+*** Example: Having a worker, e.g. for a build system
+
+#+BEGIN_SRC c++
+
+void run_all(const std::queue<std::pair<std::filesystem::path, std::vector<std::string>>> & jobs, int parallel = 4)
+{
+    std::process_group grp;
+    for (auto idx = 0u; (idx < parallel) && !jobs.empty(); idx++)
+    {
+        const auto [exe, args] = jobs.front();
+        grp.emplace(exe, args);
+        jobs.pop();
+    }
+
+    while (!jobs.empty())
+    {
+        grp.wait_one();
+        const auto [exe, args] = jobs.front();
+        grp.emplace(exe, args);
+        jobs.pop();
+    }
+
+}
+
+#+END_SRC
+
+
 
 * Open Questions
 ** if we don't have wait_for can we still detach? 
