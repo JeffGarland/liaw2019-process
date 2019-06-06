@@ -1488,7 +1488,101 @@ void run_all(const std::queue<std::pair<std::filesystem::path, std::vector<std::
 
 #+END_SRC
 
+** Class ~process_io~
 
+~process_io~ takes the three standard handles, because some OS (windows that is) does not allow to cherry-pick those. Either all three are set or all are defaults.
+
+The default of course is to forward it to ~std*~.
+
+*** Using pipes
+
+#+BEGIN_SRC c++
+
+std::pipe pin, pout, perr;
+std::process proc("foo", {}, std::process_io(pin, pout, perr));
+
+pin.write("bar", 4);
+
+#+END_SRC
+
+Forwarding between processes:
+
+#+BEGIN_SRC
+
+std::system("./proc1 | ./proc2");
+
+std::optional<std::pipe> fwd = std::pipe();
+
+std::process proc1("./proc1", {}, std::process_io({}, *fwd, {});
+std::process proc2("./proc1", {}, std::process_io(*fwd, {}, {});
+
+fwd = std::nullopt; //not needed anymore
+
+#+END_SRC
+
+You can of course use any ~pstream~ type instead.
+
+*** Using files
+
+#+BEGIN_SRC c++
+
+std::filesystem::path log_path = std::this_process::environment::home() / "my_log_file";
+std::system("foo > ~/my_log_file");
+//equivalent:
+std::process proc ("foo", std::process_io({}, log_path , {}));
+
+#+END_SRC
+
+With an extension to fstream:
+
+#+BEGIN_SRC c++
+
+std::ifstream fs{"/my_log_file"};
+std::process proc ("./foo", std::process(fs, {}, {});
+
+#+END_SRC
+
+*** ~std::this_process::stdio~
+
+Since ~std::cout~ can be redirected programmatically and has the same type as ~std::cerr~ it does not seem like a proper fit, unless it's type is changed 
+
+#+BEGIN_SRC c++
+//redirect stderr to stdout
+std::process proc ("./foo", std::process_io({}, {}, std::this_process::io().stdout());
+#+END_SRC
+
+*** Closing streams
+
+A closed stream means that the child process cannot read or write from the stream. That is, an attempt to do so yields an error. This can be done by using ~nullptr~.
+
+#+BEGIN_SRC c++
+std::process proc ("./foo", std::process_io(nullptr, nullptr, nullptr));
+#+END_SRC
+
+
+*** Other objects 
+
+Other objects, that use an underlying stream handle, shall be used. This is the case for tcp sockets (i.e. ~std::net::basic_stream_socket~).
+
+#+BEGIN_SRC c++
+
+std::net::tcp::socket sock(...) 
+//connect the socket
+
+std::process proc ("./server", std::process_io(socket, socket, "log-file"));
+#+END_SRC
+
+*** Null device (not yet specified)
+
+The null-device is a a feature of both posix ("/dev/null") and windows ("NUL"). It accepts and write, and always returns It might be worth considering adding it.
+
+#+BEGIN_SRC
+
+std::system("./foo > /dev/null");
+
+std::process proc("./foo", {}, std::process_io(std::process_io::null(), std::process_io::null(), std::process_io::null()));
+
+#+END_SRC
 
 * Open Questions
 ** if we don't have wait_for can we still detach? 
