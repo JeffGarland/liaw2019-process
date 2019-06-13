@@ -907,14 +907,14 @@ public:
     typedef typename Traits::off_type  off_type   ;
     typedef implementation-defined native_handle;
     
-    typedef basic_pipe_read_end<CharT, Traits> sink_type;
-    typedef basic_pipe_read_end<CharT, Traits> source_type;
+    typedef basic_pipe_read_end<CharT, Traits> read_end_type;
+    typedef basic_pipe_write_end<CharT, Traits> write_end_type;
 
     ///Construct the pipe from two ends that are duplicated
-    basic_pipe(const source_type & source, const sink_type & sink);
+    basic_pipe(const read_end_type & read_end, const write_end_type & write_end);
 
     ///Construct the pipe from two ends that are moved
-    basic_pipe(source_type && source, sink_type && sink);
+    basic_pipe(read_end_type && read_end, write_end_type && write_end);
 
     /// Default construct the pipe. Will be opened.
     basic_pipe();
