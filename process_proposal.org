@@ -937,16 +937,16 @@ public:
     ~basic_pipe();
 
     ///Gives an lvalue reference to the sink 
-    sink_type && sink() &&;
+    write_end_type && write_end() &&;
 
     ///Duplicates the sink 
-    sink_type sink() const &;
+    write_end_type write_end() const &;
 
     ///Gives an lvalue reference to the source 
-    source_type && source() &&;
+    read_end_type && read_end() &&;
 
     ///Duplicates the source 
-    source_type source() const &;
+    read_end_type read_end() const &;
 
     ///Write data to the pipe.
     int_type write(const char_type * data, int_type count);
