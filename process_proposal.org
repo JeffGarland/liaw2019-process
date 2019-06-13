@@ -936,17 +936,22 @@ public:
     /** Destructor closes the handles. */
     ~basic_pipe();
 
+    ///Gives an rvalue reference to the source 
+          write_end_type  & write_end() &;
+
     ///Gives an lvalue reference to the sink 
-    write_end_type && write_end() &&;
+          write_end_type && write_end() &&;
 
     ///Duplicates the sink 
-    write_end_type write_end() const &;
+    const write_end_type  & write_end() const &;
 
+    ///Gives an rvalue reference to the source 
+          read_end_type  & read_end() &;
     ///Gives an lvalue reference to the source 
-    read_end_type && read_end() &&;
+          read_end_type && read_end() &&;
 
     ///Duplicates the source 
-    read_end_type read_end() const &;
+    const read_end_type  & read_end() const &;
 
     ///Write data to the pipe.
     int_type write(const char_type * data, int_type count);
@@ -1072,11 +1077,11 @@ struct basic_pipebuf : std::basic_streambuf<CharT, Traits>
     ///Set the pipe of the streambuf.
     void pipe(const pipe_type& p);
     ///Get a reference to the pipe.
-    pipe_type &      pipe() &;
+          pipe_type &      pipe() &;
     ///Get a const reference to the pipe.
-    const pipe_type &pipe() const & {return _pipe;}
+    const pipe_type &pipe() const &;
     ///Get a rvalue reference to the pipe. Qualified as rvalue.
-    pipe_type &&     pipe()  &&;
+          pipe_type &&     pipe()  &&;
 
     ///Check if the pipe is open
     bool is_open() const ;
