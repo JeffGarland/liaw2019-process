@@ -134,19 +134,14 @@ System.out.println("Exited with " + p.exitValue())
 
 #+BEGIN_SRC python
 
-from subprocess import Popen, PIPE
+from subprocess import run
 
 # Command line arguments are all passed in a single list
 # Standard streams aren't piped by default
-child = Popen([ '/bin/cat', '-' ],
-          stdin=PIPE, stdout=PIPE, stderr=PIPE)
-
-# communicate() takes input (optional)
-# Waits for process to terminate
-# Handles to standard streams aren't available
-out, err = child.communicate(input='foo\n')
-assert out == 'foo'
-print("Exited with", child.returncode)
+result = run([ '/bin/cat', '-' ],
+          input='foo\n', capture_output=True)
+assert result.stdout == 'foo'
+print("Exited with", result.returncode)
 
 #+END_SRC
 
