@@ -311,18 +311,14 @@ namespace std {
 
   // This is to be defined, but should allow any stream that can yield a system-handle (e.g. pipes, files & sockets) and to close the stream by passing nullptr. 
   // Additionally a path should be possible to open a file just for the child process.
-  // EK: Does ProcessReadableStream mean the child can read from it, or that we can read from it?
-  //     In other words, is it the child's stdin or stdout/stderr?
   concept ProcessReadableStream = TODO;
   concept ProcessWritableStream = TODO;
 
   // A pid_type is an identifier for a process, that satisfies StrictTotallyOrdered
-  // EK: Should maybe also be TriviallyCopyable and maybe Regular?
   using pid_type = implementation-defined;
 
   // Provides a portable handle to an operating system process
   // process satisfies Movable and Boolean, but not Copyable.
-  // EK: Add rationale for not making SemiRegular (not DefaultConstructible and Copyable)
   class process;
 
   // Exception type thrown on error
@@ -339,9 +335,6 @@ namespace std {
   class process_start_dir;
 
   // Satisfies ProcessInitializer
-  // EK: Change name to process_environment, to:
-  //    a) prevent collisions with P1275
-  //    b) avoid using a very useful name in namespace std
   class environment;
   
   // Satisfies ProcessInitializer
@@ -358,7 +351,6 @@ namespace std {
   class process {
   public:
     // Provides access to underlying operating system facilities
-    // EK: TriviallyCopyable? StandardLayout? (Semi)Regular? Copyable? What are the requirements?
     using native_handle_type = implementation-defined; 
   
     // Construct a child from a property list and launch it.
@@ -367,7 +359,6 @@ namespace std {
     explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
   
     // Construct a child from a property list and launch it with a custom process launcher
-    // EK: shouldn't the argument pack be the final argument? or does this really work?
     template<ranges::InputRange R, ProcessInitializer... Inits, ProcessLauncher Launcher>
       requires ConvertibleTo<iter_value_t<R>, string>
     explicit process(const filesystem::path& exe, const R& args, Inits&&... inits, Launcher&& launcher);
@@ -379,7 +370,6 @@ namespace std {
     process() = default;
     
     // The destructor terminates 
-    // EK: Add rationale for inconsistency with thread
     ~process();
   
     // Accessors 
@@ -409,7 +399,6 @@ namespace std {
     void detach();
   
     // Terminate the child process (child process will unconditionally and immediately exit)
-    // TODO: Clean
     // Implemented with SIGKILL on POSIX and TerminateProcess on Windows
     void terminate();
   
@@ -439,10 +428,6 @@ namespace std {
 class process_error : public system_error {
 public:
   using system_error::system_error;
-
-  // EK:
-  // filesystem_error can take a path relating to the error,
-  // should we take a pid_type as well?
 };
 
 #+END_SRC
@@ -459,7 +444,6 @@ namespace std {
 
     process_group() = default;
 
-    // EK: How about copy constructors?
     process_group(process_group&& lhs);
     process_group& operator=(process_group&& lhs);
     
@@ -498,7 +482,6 @@ namespace std {
     void detach();
 
     // Terminate the child processes (child processes will unconditionally and immediately exit)
-    // TODO: Clean
     // Implemented with SIGKILL on POSIX and TerminateProcess on Windows
     void terminate();
 
@@ -554,7 +537,6 @@ namespace std {
     using out_default = implementation-defined;
     using err_default = implementation-defined;
 
-    // KM: Additionally, a path should be possible to open a file just for the child process
     template<ProcessReadableStream In = in_default,
               ProcessWritableStream Out = out_default,
               ProcessWritableStream Err = err_default> 
@@ -599,7 +581,6 @@ namespace std {
     environment();
     
     // Construct from a native type, so the current environment can be cloned
-    // EK: taken by value, so is native_environment_type cheap to copy?
     environment(native_environment_type native_environment); 
     
     class entry;
@@ -611,14 +592,12 @@ namespace std {
     using key_type   = implementation-defined; 
     using pointer    = implementation-defined;
     
-    // EK: Take by rvalue reference as well?
     value_type  get(const key_type& id);
     void        set(const key_type& id, const value_type& value);
     void      reset(const key_type& id);
 
     // Get all the keys
     // Return type satisfies ForwardRange with iter_value_t convertible to string
-    // EK: is ForwardRange the right choice here?
     implementation-defined keys() const;
     
     // Utility functions to query common values
@@ -632,14 +611,12 @@ namespace std {
     filesystem::path shell() const;
     
     // The path variable, parsed.
-    // EK: Also return a range instead of vector?
     vector<filesystem::path> path() const;
     
     // The path extensions, that mark a file as executable (empty on posix)
     vector<filesystem::path> extensions() const;
 
     // Find an executable file with this name.
-    // EK: const string& -> string_view?
     filesystem::path find_executable(const string& name);
   };
 
@@ -657,7 +634,6 @@ namespace std {
     value_type native_string();
 
     // Split according to the OS specifics
-    // EK: Return a range?
     vector<value_type> as_vector();
     
     entry& operator=(const string&);
@@ -693,12 +669,8 @@ namespace std {
 
 #+BEGIN_SRC c++
 
-// EK: Change signature; system takes a string, not an argument pack
 template<class... Args>
-int system(Args&&... args)
-{
-  // EK: Change constructor call to taking a path, arguments and something similar to shell_launcher
-  // EK: also, a rogue comma at the end
+int system(Args&&... args) {
   process c(forward<Args>(args)...,);
   if (!c.valid())
     return -1;
@@ -711,8 +683,6 @@ int system(Args&&... args)
 ** Extension of ~fstream~ 
 
 The standard file streams (=fstream=/=ofstream=/=ifstream=) shall have a member function that return the native handle of the opened file, so that process can use those for forwarding.
-
-EK: Also add to basic_filebuf?
 
 #+BEGIN_SRC c++
 
@@ -756,7 +726,6 @@ namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   class basic_pipe;
 
-  // EK: how about u8pipe, u16pipe and u32pipe? Probably let SG16 decide
   using pipe = basic_pipe<char>;
   using wpipe = basic_pipe<wchar_t>;
 
@@ -885,7 +854,7 @@ namespace std {
 
 #+END_SRC
 
-** Classes ~basic_pipe_read_end~, ~basic_pipe_write_end~, ~basic_pipe~ Synopses
+** Classes ~basic_pipe_read_end~, ~basic_pipe_write_end~, ~basic_pipe~ 
 
 #+BEGIN_SRC c++
 
@@ -1043,7 +1012,7 @@ p_write.write("data", 5);
 
 Note that overloading allows us to either copy or move the pipe, i.e. the given example only moves the handles without duplicating them.
 
-** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ Synopses
+** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ 
 
 #+BEGIN_SRC c++
 
@@ -1066,7 +1035,6 @@ namespace std {
     basic_pipebuf(const basic_pipebuf&) = default;
     basic_pipebuf(basic_pipebuf&&) = default;
 
-    // EK: copy assign deleted, but copy construct defaulted?
     basic_pipebuf& operator=(const basic_pipebuf&) = delete;
     basic_pipebuf& operator=(basic_pipebuf&&) = default;
 
@@ -1283,7 +1251,7 @@ std::ipstream is; // Not opened
 std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be read from is
 #+END_SRC
 
-** Classes ~async_pipe_read_end~, ~async_pipe_write_end~, ~async_pipe~ Synopses
+** Classes ~async_pipe_read_end~, ~async_pipe_write_end~, ~async_pipe~ 
 
 #+BEGIN_SRC c++
 
@@ -1526,9 +1494,7 @@ This header provides information about the current process.
 
 #include <process>
 
-namespace std::this_process
-{
-  // EK: process::native_handle_type and pid_type respectively?
+namespace std::this_process {
   using native_handle_type = implementation-defined;
   using pid_type = implementation-defined;
   
@@ -1570,7 +1536,6 @@ namespace std::this_process
     void      reset(const key_type& id);
   
     // Get all the keys
-    // EK: see environment
     implementation-defined keys() const;
     
     // Home folder 
@@ -1595,10 +1560,8 @@ namespace std::this_process
 
       entry();
 
-      // EK: (w)string_view?
       entry(const string&);
       entry(const wstring&);
-      // EK: InputRange?
       entry(const vector<value_type>&);
 
       entry& operator=(const string&);
