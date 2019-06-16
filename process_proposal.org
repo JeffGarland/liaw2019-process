@@ -8,12 +8,11 @@
 #+LATEX_HEADER:\usepackage[margin=0.8in]{geometry} 
 #+LATEX_HEADER:\usepackage{parskip}
 
-#+Title: D1750R0 A proposal to add process management to the C++ standard library
+#+Title: D1750R0 A Proposal to Add Process Management to the C++ Standard Library
 #+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
-** Revision 0
 Initial release.
 
 * Introduction
@@ -82,9 +81,7 @@ If there are multiple threads reading or writing from the same pipe at the same 
 
 ** Environment and Command Line Arguments
 
-Creation of a child process sometimes involves modifying the environment for the child process. This proposal references a current proposal for referencing a process environment. However, the proposal P1275 (see References in the bottom) would need to be enhanced to support multiple instances of environments for access and modification of child process environment.
-
-This proposal currently contains a synopsis of similar functionality.
+Creation of a child process sometimes involves modifying the environment for the child process. This proposal references a current proposal for referencing a process environment. However, the proposal P1275 would need to be enhanced to support multiple instances of environments for access and modification of child process environment.  This proposal currently contains a synopsis of similar functionality.
 
 * Survey of facilities in other standard libraries
 ** C/C++ system function
@@ -424,7 +421,7 @@ std::system("./proc1 | ./proc2");
 
 #+END_SRC
 
-You can of course use any ~pstream~ type instead.
+You can also use any ~pstream~ type instead.
 
 *** Using files
 
@@ -499,7 +496,7 @@ std::process proc("./foo", {}, std::process_io(
 
 *** ~operator[]~
 
-Unlike Muerte's proposal, ours does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of Windows. However, both maybe defined on Windows. This can cause a problem:
+Unlike Muerte's proposal (P1275), this proposal does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of Windows. However, both maybe defined on Windows. This can cause a problem:
 
 #+BEGIN_SRC c++
 
@@ -507,18 +504,23 @@ std::environment env = std::this_process::environment::native_environment();
 
 // Let's say it's "Path", but we expect "PATH"
 env["PATH"].add_value("C:\\python");
-std::process proc (env.find_executable("python"), {"./my_script.py"}, env); // Error: python not found or ambiguity error.
+std::process proc (env.find_executable("python"), 
+                   {"./my_script.py"}, 
+                    env); // Error: python not found or ambiguity error.
 
 #+END_SRC
 
-If we however have it explicitly, things are more obvious.
+Thus this proposal makes the ambiguity explicit.
 
 #+BEGIN_SRC c++
 
-std::string to_upper(const std::string& in); // Implement a conversion to upper case here
+//make upper case
+std::string to_upper(const std::string& in); 
 
 auto keys = env.keys(); 
-auto path_key = std::find_if(keys.begin(), keys.end(), [](auto& str) { return to_upper(str) == "PATH"; });
+auto path_key = std::find_if(keys.begin(), 
+                             keys.end(), 
+                             [](auto& str) { return to_upper(str) == "PATH"; });
 
 auto entry = env.get(path_key); 
 
@@ -562,7 +564,8 @@ This function shall find an executable with the name. if the OS uses file extens
 
 #+BEGIN_SRC c++
 
-auto pt = std::this_process::environment::find_executable("readme.txt"); //finds a file, but is not executable
+//finds a file, but is not executable
+auto pt = std::this_process::environment::find_executable("readme.txt"); 
 assert(pt.empty());
 
 #+END_SRC
@@ -589,10 +592,6 @@ process(..., custom_launcher& cl) : process(cl.launch) {}
 cl.launch(...);
 
 #+END_SRC
-
-** Handling of parameters
-  - There's an issue of escaping the argument properly
-  - see issues below on P1275
 
 ** ~wait~ or ~join~
 The name of the method in ~class process~ was discussed at length.  The name ~join~ would be similar to ~std::thread~ while ~wait~ is more like various locking classes in the standard.  ~boost.process~ supports both.  The decision was to use ~wait~, but the name is open to bike shedding.
@@ -643,13 +642,10 @@ A =ProcessInitializer= allows minor additions, that just manipulate the process.
 
 Not having these customization points would greatly limit the applicability of this library.
 
-JG TODO fix
-~on_error~
-On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
-
-~on_success~
-
-~on_setup~
+The =ProcessLauncher= has three methods that must be provided by a custom launcher.  These are:
++ ~on_setup~   - calls the initializer before attempting to launch
++ ~on_success~ - calls the initializer after successful process launch
++ ~on_error~ - On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
 
 ** Error Handling
 
@@ -695,19 +691,17 @@ namespace std {
   
   // An initializer is an object that changes the behavior of a process during launch 
   // and thus listens to at least one of the hooks of the launcher. 
-  // Note that the following example only uses portable hooks, but non portables might suffice as well
+  // Note that the following example only uses portable hooks, but non portables 
+  // might suffice as well
   template<class Init, ProcessLauncher Launcher = process_launcher>
   concept ProcessInitializer =
-       requires(Init initializer, Launcher launcher) { {initializer.on_setup(launcher)}   -> void; }
-    || requires(Init initializer, Launcher launcher) { {initializer.on_success(launcher)} -> void; }
-    || requires(Init initializer, Launcher launcher) { {initializer.on_error(launcher, error_code())} -> void; };
+       requires(Init initializer, Launcher launcher) 
+       { {initializer.on_setup(launcher)}   -> void; }
+    || requires(Init initializer, Launcher launcher) 
+       { {initializer.on_success(launcher)} -> void; }
+    || requires(Init initializer, Launcher launcher) 
+       { {initializer.on_error(launcher, error_code())} -> void; };
   }
-
-  // This is to be defined, but should allow any stream that can yield a system-handle 
-  // (e.g. pipes, files & sockets) and to close the stream by passing nullptr. 
-  // Additionally a path should be possible to open a file just for the child process.
-  concept ProcessReadableStream = TODO;
-  concept ProcessWritableStream = TODO;
 
   // A pid_type is an identifier for a process, that satisfies StrictTotallyOrdered
   using pid_type = implementation-defined;
@@ -726,9 +720,6 @@ namespace std {
   
   // Provides initializers for the standard io. 
   class process_io;
-  
-  // Provides a way to set the starting directory of the new process. 
-  class process_start_dir;
 
   // Satisfies ProcessInitializer
   class environment;
@@ -757,7 +748,9 @@ namespace std {
     // Construct a child from a property list and launch it with a custom process launcher
     template<ranges::InputRange R, ProcessInitializer... Inits, ProcessLauncher Launcher>
       requires ConvertibleTo<iter_value_t<R>, string>
-    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits, Launcher&& launcher);
+    explicit process(const filesystem::path& exe, 
+                     const R& args, Inits&&... inits, 
+                     Launcher&& launcher);
   
     // Attach to an existing process
     explicit process(pid_type& pid);
@@ -782,11 +775,13 @@ namespace std {
     // That is on Linux it contains the reason of the exit, such as can be detected by WIFSIGNALED 
     int native_exit_code() const;
 
-    // Check if the process is running. If the process has exited already, it might store the exit_code internally.
+    // Check if the process is running. If the process has exited already, it might store 
+    // the exit_code internally.
     bool running() const;
   
     // Check if this handle holds a child process.
-    // NOTE: That does not mean, that the process is still running. It only means, that the handle does or did exist.
+    // NOTE: That does not mean, that the process is still running. It only means, that 
+    // the handle does or did exist.
     bool valid() const;
     explicit operator bool() const; // Equivalent to this->valid()
   
@@ -810,7 +805,8 @@ namespace std {
     template<class Clock, class Duration>
     bool wait_until(const chrono::time_point<Clock, Duration>& timeout_time);
     
-    //The following is dependent on the networking TS. CompletionToken has the signature (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
+    // The following is dependent on the networking TS. CompletionToken has the signature 
+    // (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
     template<class CompletionToken>
     auto async_wait(net::Executor& ctx, CompletionToken&& token);
   };
@@ -878,12 +874,15 @@ namespace std {
       requires ConvertibleTo<iter_value_t<Args>, string>
     pid_type emplace(const filesystem::path& exe, const Args& args, Inits&&...inits);
 
-    // Emplace a process into the group, i.e. launch it attached to the group with a custom process launcher
+    // Emplace a process into the group, i.e. launch it attached to the group with 
+    // a custom process launcher
     template<ranges::InputRange Args, ProcessInitializer... Inits, ProcessLauncher Launcher>
       requires ConvertibleTo<iter_value_t<Args>, string>
-    pid_type emplace(const filesystem::path& exe, const Args& args, Inits&&...inits, Launcher&& launcher);
+    pid_type emplace(const filesystem::path& exe, 
+                     const Args& args, Inits&&...inits, 
+                     Launcher&& launcher);
 
-    // Attach an existing process to the group. The process object will be empty afterwads
+    // Attach an existing process to the group. The process object will be empty afterwards
     pid_type attach(process&& proc);
 
     // Take a process out of the group
@@ -892,8 +891,9 @@ namespace std {
     // Detach a process group -- let it run after this handle destructs
     void detach();
 
-    // Terminate the child processes (child processes will unconditionally and immediately exit)
-    // Implemented with SIGKILL on POSIX and TerminateProcess on Windows
+    // Terminate the child processes (child processes will unconditionally and 
+    // immediately exit).  Implemented with SIGKILL on POSIX and TerminateProcess
+    // on Windows
     void terminate();
 
     // Block until all processes exit
@@ -961,20 +961,6 @@ namespace std {
 
 #+END_SRC
 
-** Class ~process_start_dir~
-
-#+BEGIN_SRC c++
-
-namespace std {
-  // This class the starting directory for the child process.
-  // Satisfies ProcessInitializer
-  class process_start_dir {
-  public:
-    process_start_dir(const filesystem::path&);
-  };
-}
-
-#+END_SRC
 
 ** Class ~environment~
 
@@ -1000,8 +986,8 @@ namespace std {
     
     using value_type = entry;
 
-    // Note that Windows uses wchar_t here, the key type should be able to be constructed from a char* though
-    // So it needs to be similar to filesystem::path
+    // Note that Windows uses wchar_t here, the key type should be able to be constructed 
+    // from a char* though. So it needs to be similar to filesystem::path
     using key_type   = implementation-defined; 
     using pointer    = implementation-defined;
     
@@ -1060,7 +1046,7 @@ namespace std {
 
 ** Class ~process_limit_handles~
 
-This limit_handles property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
+This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
 
 Since limit also closes the standard handles unless they are explicitly redirected, they can be ignored by =limit_handles=, through passing in =this_process::stdio()=.
 
@@ -1070,7 +1056,8 @@ namespace std {
   // Satisfies ProcessInitializer
   class process_limit_handles {
   public:
-    // Select all the handles that should be inherited even though they are not used by any initializer.
+    // Select all the handles that should be inherited even though they are not 
+    // used by any initializer.
     template<class... Handles>
     process_limit_handles(Handles&&... handles);
   };
@@ -1102,13 +1089,17 @@ namespace std::this_process {
   // Get the handles to the standard streams
   stdio_t stdio();
 
-  // Get a snapshot of all handles of the process (i.e. file descriptors on POSIX and handles on Windows) of the current process.
+  // Get a snapshot of all handles of the process (i.e. file descriptors on POSIX 
+  // and handles on Windows) of the current process.
   // NOTE: This function might not work on certain POSIX systems.
-  // NOTE: On Windows version older than Windows 8 this function will iterate all the system handles, meaning it might be quite slow.
-  // NOTE: This functionality is utterly prone to race conditions, since other threads might open or close handles.
+  // NOTE: On Windows version older than Windows 8 this function will iterate 
+  // all the system handles, meaning it might be quite slow.
+  // NOTE: This functionality is utterly prone to race conditions, since other 
+  // threads might open or close handles.
   vector<native_handle_type> get_handles();
 
-  // Determines if a given handle is a a stream-handle, i.e. any handle that can be used with read and write functions.
+  // Determines if a given handle is a a stream-handle, i.e. any handle that can 
+  // be used with read and write functions.
   // Stream handles include pipes, regular files and sockets.
   bool is_stream_handle(native_handle_type handle);
 
@@ -1118,7 +1109,9 @@ namespace std::this_process {
     native_environment_type native_environment();
   
     using value_type = entry;
-    using key_type   = implementation-defined; // Note that Windows uses wchar_t here, the key type should be able to be constructed from a char* though. So it needs to be similar to filesystem::path
+    // Note that Windows uses wchar_t for key_type, the key type should be able to be 
+    // constructed from a char* though. So it needs to be similar to filesystem::path
+    using key_type   = implementation-defined; 
     using pointer    = implementation-defined;
     
     value_type  get(const key_type& id);
@@ -1167,7 +1160,6 @@ namespace std::this_process {
       
       entry& operator=(const string&);
       entry& operator=(const wstring&);
-      
       entry& operator=(const vector<value_type>&);
     };
   }
@@ -1403,6 +1395,7 @@ namespace std {
     
     // Check if the pipe is open.
     bool is_open();
+
     // Close the pipe
     void close();
   };
@@ -1680,7 +1673,7 @@ namespace std {
 
 #+END_SRC
 
-The structure of the streams reflects the pipe_end distinction of ~basic_pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
+The structure of the streams reflects the ~pipe_end~ distinction of ~basic_pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
 
 #+BEGIN_SRC c++
 std::ipstream is; // Not opened
@@ -1721,16 +1714,18 @@ namespace std {
 
     // Construct form pipe_end
     template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_read_end(net::Executor& ios, const basic_pipe_read_end<CharT, Traits>& p);
+    explicit async_pipe_read_end(net::Executor& ios, 
+                                 const basic_pipe_read_end<CharT, Traits>& p);
 
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
+    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
+    // exception is thrown.
     template<class CharT, class Traits = char_traits<CharT>>
     inline async_pipe_read_end& operator=(const basic_pipe_read_end<CharT, Traits>& p);
 
     // Destructor closes the pipe handles
     ~async_pipe_read_end();
 
-    // Explicit conversion operator to basic_pipe/
+    // Explicit conversion operator to basic_pipe
     template<class CharT, class Traits = char_traits<CharT>>
     explicit operator basic_pipe_read_end<CharT, Traits>() const;
     
@@ -1777,9 +1772,11 @@ namespace std {
 
     // Construct from pipe_end
     template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_write_end(net::Executor& ios, const basic_pipe_write_end<CharT, Traits>& p);
+    explicit async_pipe_write_end(net::Executor& ios, 
+                                  const basic_pipe_write_end<CharT, Traits>& p);
 
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
+    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
+    // exception is thrown.
     template<class CharT, class Traits = char_traits<CharT>>
     async_pipe_write_end& operator=(const basic_pipe_write_end<CharT, Traits>& p);
 
@@ -1834,7 +1831,8 @@ namespace std {
     // NOTE: Windows restricts possible names
     async_pipe(net::Executor& ios, const filesystem::path& name);
 
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
+    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
+    // exception is thrown.
     async_pipe(const async_pipe& lhs);
     async_pipe(async_pipe&& lhs);
 
@@ -1842,11 +1840,13 @@ namespace std {
     async_pipe& operator=(async_pipe&& lhs);
 
     // Construct from a pipe
-    // @note Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
+    // @note Windows requires a named pipe for this, if a the wrong type is used an 
+    // exception is thrown.
     template<class CharT, class Traits = char_traits<CharT>>
     explicit async_pipe(net::Executor& ios, const basic_pipe<CharT, Traits>& p);
 
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an exception is thrown.
+    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
+    // exception is thrown.
     template<class CharT, class Traits = char_traits<CharT>>
     async_pipe& operator=(const basic_pipe<CharT, Traits>& p);
 
@@ -1906,13 +1906,14 @@ namespace std {
 
 #+END_SRC
 
-~async_pipe~ is structured similar to the ~basic_pipe~ triple. The ~async_pipe_end*::open~ returns a `basic_pipe_end_*` to the other side. This allows to use it in a process or to construct an opposite async_pipe:
+~async_pipe~ is structured similar to the ~basic_pipe~ triple. The ~async_pipe_end*::open~ returns a ~basic_pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
 
 #+BEGIN_SRC c++
 
 std::net::system_executor exec;
 std::async_pipe_read_end ip{exec}; // Not opened
-std::async_pipe_read_end op{exec, ip.open()}; // Now re & os point to the same pipe, though can use different executors.
+// After next line ip & op point to the same pipe, though can use different executors.
+std::async_pipe_read_end op{exec, ip.open()}; 
 
 #+END_SRC
 
