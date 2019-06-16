@@ -9,7 +9,7 @@
 #+LATEX_HEADER:\usepackage{parskip}
 
 #+Title: D1750R0 A proposal to add process management to the C++ standard library
-#+Author: Klemens Morganstern, Jeff Garland, Elias Kosunen, Fatih Bakir
+#+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
@@ -54,7 +54,7 @@ int main() {
     }
     child.wait();
   }
-  catch(const std::process_error& e) {
+  catch (const std::process_error& e) {
     std::cerr << e.what();
   }
 }
@@ -72,15 +72,11 @@ Process groups allow for managing a set of processes at the operating system lev
 ** Pipes
 A pipe is a unidirectional, serial communication line across processes. A pipe has two ends: a write end and a read end.
 
-
 A pipe is buffered. The size of the buffer is implementation defined. When there's no data in the buffer, the pipe is called empty. When the buffer is full, the pipe is called full.
-
 
 Reading from an empty pipe is a blocking operation. Writing to a pipe resumes any blocked threads that are waiting to read on that pipe.
 
-
 Writing to a full pipe is a blocking operation. Reading from a pipe resumes any blocked threads that are writing to that pipe.
-
 
 If there are multiple threads reading or writing from the same pipe at the same time the order in which they read the data is unspecified.
 
@@ -174,7 +170,7 @@ println!("Exited with {}", output.status.code.unwrap());
 
 #+END_SRC
 
-** Nodejs
+** Node.js
 
 #+BEGIN_SRC js
 
@@ -196,9 +192,10 @@ p.on('close', (code) => {
 * Design Discussion & Examples
 ** Concept ~ProcessLauncher~
 
-The process launcher is a class that impements the actual launch of a process. In most cases there are different versions to do this. On linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices. And while posix can change a user by utilizing setuid in a ProcessInitializer, windows requires the invocation of a different function (CreateProcessAsUserA).
+The process launcher is a class that impements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
+And while POSIX can change a user by utilizing setuid in a ~ProcessInitializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
 
-As an example for linux:
+As an example for Linux:
 
 #+BEGIN_SRC c++
 
@@ -209,7 +206,7 @@ std::process my_proc("/bin/programm", {}, launcher);
 
 #+END_SRC
 
-or for windows:
+or for Windows:
 
 #+BEGIN_SRC c++
 
@@ -233,7 +230,7 @@ Both versions make sense in their own way: on the one hand using the process con
 
 ** Concept ~ProcessInitializer~
 
-The process initializer is a class that modifies the behaviour of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependable on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on windows) and thus might break with another launcher.
+The process initializer is a class that modifies the behaviour of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependable on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
 
 Note that the concept might look different on other implementation, since additional event hooks might exist.
 
@@ -256,25 +253,28 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 ** Class ~process~
 *** Constructor 
 
-~process(std::filesystem::path, std::ranges::Range<String>, Inits...init)~
+~process(std::filesystem::path, std::ranges::Range, Inits... init)~
 
-This is the default launching function, and forwards to the ~std::process_launcher~. boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this library. This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection). Instead we require the actually used (absolute) path of the executable. Since it is common to just type a command and expect the shell to search for the executabe in the ~PATH~ environment variable, there is a helper function for that. Either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
+This is the default launching function, and forwards to ~std::process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
+This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
+Instead, we require the actually used (absolute) path of the executable.
+Since it is common to just type a command and expect the shell to search for the executabe in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
 
 #+BEGIN_SRC c++
 
 std::system("git --version"); // Launches to cmd or /bin/sh
 
-std::process("git", {"--version"}); // Does err, exe not found
+std::process("git", {"--version"}); // Throws process_error, exe not found
 std::process(std::this_process::environment::find_executable("git"), {"--version"}); // Finds the exe
 
-// Or if we want to run it through the shell, note that /c is windows specific
+// Or if we want to run it through the shell, note that /c is Windows specific
 std::process(std::this_process::environment::shell(), {"/c", "git --version"});
 
 #+END_SRC
 
 Another solution is for a user to provide their own ~ProcessLauncher~ as a ~ShellLauncher~.
 
-*** function ~wait~
+*** Function ~wait~
 
 The wait function waits for a process to exit. When replacing ~std::system~ it can be used like this:
 
@@ -288,7 +288,7 @@ const auto result_proc = proc.exit_code();
 
 #+END_SRC
 
-*** function ~wait_for~
+*** Function ~wait_for~
 
 In case the child process might hang, ~wait_for~ might be used.
 
@@ -298,15 +298,15 @@ std::process proc(std::this_process::environment::find_executable("python"), {"-
 
 int res = -1;
 if (proc.wait_for(std::chrono::seconds(1))
-    res = proc.exit_code();
+  res = proc.exit_code();
 else
-    proc.terminate(); 
+  proc.terminate(); 
 
 #+END_SRC
 
-*** function ~native_handle~
+*** Function ~native_handle~
 
-Since there is a lot funcitonality that is not portable, the ~native_handle~ is accessible. For example, there is no clear equivalent for ~SIGTERM~ on windows. If a user still wants to use this, he might still do so:
+Since there is a lot funcitonality that is not portable, the ~native_handle~ is accessible. For example, there is no clear equivalent for ~SIGTERM~ on Windows. If a user still wants to use this, they could still do so:
 
 #+BEGIN_SRC c++
 
@@ -317,22 +317,22 @@ proc.wait();
 
 #+END_SRC
 
-*** function ~native_exit_code~
+*** Function ~native_exit_code~
 
-The exit-code may contain more information on a specific system. Practically this is the case on posix. If a user wants to extract additional information he might need to use ~native_exit_code~.
+The exit-code may contain more information on a specific system. Practically this is the case on POSIX. If a user wants to extract additional information they might need to use ~native_exit_code~.
 
 #+BEGIN_SRC c++
 
 std::process proc(std::this_process::environment::find_executable("gcc"), {});
 proc.wait();
-const auto exit_code = proc.exit_code(); //equals 1, since no input files
+const auto exit_code = proc.exit_code(); // Equals to 1, since no input files
 
-//Linux specific:
-const exited_normally = WIFEXITED(proc.native_exit_code();
+// Linux specific:
+const bool exited_normally = WIFEXITED(proc.native_exit_code());
 
 #+END_SRC
 
-*** function ~async_wait~
+*** Function ~async_wait~
 
 To allow asynchronous operations, the process library shall integrate with the networking TS.
 
@@ -342,7 +342,7 @@ extern std::net::system_executor exec;
 std::process proc(std::this_environment::find_executable("gcc"), {});
 
 auto fut = proc.async_wait(exec, std::net::use_future_t());
-const exit_code = fut.get();
+const bool exit_code = fut.get();
 assert(exit_code == proc.exit_code());
 
 #+END_SRC
@@ -355,16 +355,16 @@ The process group can be used for managing several processes at once. Because of
 
 #+BEGIN_SRC c++
 
-std::process_group grp;
+std::process_group group;
 
-auto pid_target = grp.emplace("./my_proc", {});
-auto pid_gdb = grp.emplace("/usr/bin/gdb", {-p, std::to_string(pid_target)});
+auto pid_target = group.emplace("./my_proc", {});
+auto pid_gdb = group.emplace("/usr/bin/gdb", {-p, std::to_string(pid_target)});
 // Do something
 
 // Kill gdb and use the process individually:
 
-grp.detach(pid_gdb).terminate();
-std::process target = grp.detach(pid_target); 
+group.detach(pid_gdb).terminate();
+std::process target = group.detach(pid_target); 
 
 #+END_SRC
 
@@ -372,18 +372,20 @@ std::process target = grp.detach(pid_target);
 
 #+BEGIN_SRC c++
 
-void run_all(const std::queue<std::pair<std::filesystem::path, std::vector<std::string>>>& jobs, int parallel = 4) {
-  std::process_group grp;
+void run_all(
+  const std::queue<std::pair<std::filesystem::path, std::vector<std::string>>>& jobs,
+  int parallel = 4) {
+  std::process_group group;
   for (auto idx = 0u; (idx < parallel) && !jobs.empty(); idx++) {
     const auto [exe, args] = jobs.front();
-    grp.emplace(exe, args);
+    group.emplace(exe, args);
     jobs.pop();
   }
 
   while (!jobs.empty()) {
-    grp.wait_one();
+    group.wait_one();
     const auto [exe, args] = jobs.front();
-    grp.emplace(exe, args);
+    group.emplace(exe, args);
     jobs.pop();
   }
 }
@@ -392,9 +394,9 @@ void run_all(const std::queue<std::pair<std::filesystem::path, std::vector<std::
 
 ** Class ~process_io~
 
-~process_io~ takes the three standard handles, because some OS (windows that is) does not allow to cherry-pick those. Either all three are set or all are defaults.
+~process_io~ takes three standard handles, because some OS (Windows, that is) do not allow to cherry-pick those. Either all three are set or all are defaults.
 
-The default of course is to forward it to ~std*~.
+The default, of course, is to forward it to ~std*~.
 
 *** Using pipes
 
@@ -413,12 +415,12 @@ Forwarding between processes:
 
 std::system("./proc1 | ./proc2");
 
-std::optional<std::pipe> fwd = std::pipe();
+{
+  std::pipe fwd = std::pipe();
 
-std::process proc1("./proc1", {}, std::process_io({}, *fwd, {});
-std::process proc2("./proc1", {}, std::process_io(*fwd, {}, {});
-
-fwd = std::nullopt; // Not needed anymore
+  std::process proc1("./proc1", {}, std::process_io({}, fwd, {}));
+  std::process proc2("./proc1", {}, std::process_io(fwd, {}, {}));
+}
 
 #+END_SRC
 
@@ -431,7 +433,7 @@ You can of course use any ~pstream~ type instead.
 std::filesystem::path log_path = std::this_process::environment::home() / "my_log_file";
 std::system("foo > ~/my_log_file");
 // Equivalent:
-std::process proc ("foo", std::process_io({}, log_path, {}));
+std::process proc("foo", std::process_io({}, log_path, {}));
 
 #+END_SRC
 
@@ -440,7 +442,7 @@ With an extension to fstream:
 #+BEGIN_SRC c++
 
 std::ifstream fs{"/my_log_file"};
-std::process proc ("./foo", std::process(fs, {}, {});
+std::process proc("./foo", std::process(fs, {}, {});
 
 #+END_SRC
 
@@ -461,32 +463,35 @@ A closed stream means that the child process cannot read or write from the strea
 
 #+BEGIN_SRC c++
 
-std::process proc ("./foo", std::process_io(nullptr, nullptr, nullptr));
+std::process proc("./foo", std::process_io(nullptr, nullptr, nullptr));
 
 #+END_SRC
 
 *** Other objects 
 
-Other objects, that use an underlying stream handle, shall be used. This is the case for tcp sockets (i.e. ~std::net::basic_stream_socket~).
+Other objects, that use an underlying stream handle, could also be used. This is the case for tcp sockets (i.e. ~std::net::basic_stream_socket~).
 
 #+BEGIN_SRC c++
 
 std::net::tcp::socket sock(...) 
 // Connect the socket
 
-std::process proc ("./server", std::process_io(socket, socket, "log-file"));
+std::process proc("./server", std::process_io(socket, socket, "log-file"));
 
 #+END_SRC
 
 *** Null device (not yet specified)
 
-The null-device is a a feature of both posix ("/dev/null") and windows ("NUL"). It accepts and write, and always returns It might be worth considering adding it.
+The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL"). It accepts and write, and always returns.
+It might be worth it to consider adding it.
 
 #+BEGIN_SRC c++
 
 std::system("./foo > /dev/null");
 
-std::process proc("./foo", {}, std::process_io(std::process_io::null(), std::process_io::null(), std::process_io::null()));
+// Not (yet) part of this paper
+std::process proc("./foo", {}, std::process_io(
+  std::process_io::null(), std::process_io::null(), std::process_io::null()));
 
 #+END_SRC
 
@@ -494,7 +499,7 @@ std::process proc("./foo", {}, std::process_io(std::process_io::null(), std::pro
 
 *** ~operator[]~
 
-Unlike Muerte's proposal, ours does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of windows. However, both maybe defined on windows. This can cause a problem:
+Unlike Muerte's proposal, ours does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of Windows. However, both maybe defined on Windows. This can cause a problem:
 
 #+BEGIN_SRC c++
 
@@ -502,7 +507,7 @@ std::environment env = std::this_process::environment::native_environment();
 
 // Let's say it's "Path", but we expect "PATH"
 env["PATH"].add_value("C:\\python");
-std::process proc (env.find_executable("python"), {"./my_script.py"}, env); //error -> python not found or ambiguity error.
+std::process proc (env.find_executable("python"), {"./my_script.py"}, env); // Error: python not found or ambiguity error.
 
 #+END_SRC
 
@@ -525,22 +530,22 @@ env.set(path_key, val);
 
 *** Function ~environment::home()~
 
-This should be it's own function, because it is one value on posix (~"HOME"~) but two on windows (~"HOME_DRIVE"~, ~"HOME_DIR"~).
+This should be it's own function, because it is one value on POSIX (~"HOME"~) but two on Windows (~"HOME_DRIVE"~, ~"HOME_DIR"~).
 
 *** Function ~environment::extensions~
 
-This environment variable is only used on systems that use file extensions to determine executables (i.e. windows).
+This environment variable is only used on systems that use file extensions to determine executables (i.e. Windows).
 
 #+BEGIN_SRC c++
 
 // Assume /home/hello_world.py is the executable and "/home" is in PATH already
-// --> It names hello_world on linux, hello_world.py on windows.
+// --> It names hello_world on Linux, hello_world.py on Windows.
 std::environment env = std::this_process::environment::native_environment();
 auto extensions = env.extensions();
 
 std::process proc;
 
-// We can use find_executable on linux only if the file does not have the syntax.
+// We can use find_executable on Linux only if the file does not have the syntax.
 // This is in accordance with the shell rules
 if (std::find(extensions.begin(), extensions.end(), ".py")) {
   proc = std::process(env.find_executable("hello_world"), {});
@@ -596,9 +601,7 @@ The name of the method in ~class process~ was discussed at length.  The name ~jo
 
 The solution provides access to the operating system, like =std::thread=, for programmers who to go beyond the provided facilities.
 
-
-
-** pipe close and EOF
+** Pipe close and EOF
 
 Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behaviour is not necessarily intuitive:
 
@@ -628,7 +631,7 @@ Note that overloading allows us to either copy or move the pipe, i.e. the given 
 
 =std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing =std::this_process::environment::shell()=.
 
-The standard process library does not touch on user management. As with file level visibility and user access the resposibility for user permissions lies outside the standard.  For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process.  This would be reflected as ~system_error~. 
+The standard process library does not touch on user management. As with file level visibility and user access the resposibility for user permissions lies outside the standard. For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process. This would be reflected as ~system_error~. 
 
 ** Extensibility
 
@@ -637,7 +640,6 @@ To be extensible this library uses two concepts: =ProcessLauncher= and =ProcessI
 A =ProcessLauncher= is the actual function creating the process. It can be used to provide platform dependent behaviour such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
 
 A =ProcessInitializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
-
 
 Not having these customization points would greatly limit the applicability of this library.
 
@@ -649,24 +651,22 @@ On error passes an ~std::error_code~ to the initializer, so it can react, e.g. f
 
 ~on_setup~
 
-
-
 ** Error Handling
 
-Uses exceptions by throwing a =std::process_error=.  ~boost.process~ has an alternative error code based api similar to ~std::filesystem~. Field experience shows little actual usage of this api so it was not included in the proposal. 
+Uses exceptions by throwing a =std::process_error=. ~boost.process~ has an alternative error code based api similar to ~std::filesystem~. Field experience shows little actual usage of this api so it was not included in the proposal. 
 
 ** Synchronous Versus Asynchronous and Networking TS
-Synchronous process management is prone to potential deadlocks.  However used in conjunction with =std::thread= and other facilities synchronous management can be useful.  Thus the proposal supports both styles.
+Synchronous process management is prone to potential deadlocks. However used in conjunction with =std::thread= and other facilities synchronous management can be useful. Thus the proposal supports both styles.
 
-~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors.  This proposal currently references the Networking TS for this behavior.  However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
+~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors. This proposal currently references the Networking TS for this behavior. However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
 
-** Integration of iostreams and pipes
+** Integration of =iostream= and pipes
 
-Pipes bring their own streams, that can be used within a process (e.g. between threads).  Thus the proposal provides header ~pstream~ and the various pipe stream classes as a separate entity. 
+Pipes bring their own streams, that can be used within a process (e.g. between threads). Thus the proposal provides header ~pstream~ and the various pipe stream classes as a separate entity. 
 
 * Technical Specification
 
-The following represents a first draft of an annotated technical specification without formal wording.  For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
+The following represents a first draft of an annotated technical specification without formal wording. For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
 
 ** Header ~<process>~ Synopsis
 
@@ -682,10 +682,12 @@ The following represents a first draft of an annotated technical specification w
 namespace std {
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
-  template<class T>
-  concept bool ProcessLauncher = requires(T launcher) {
-    {launcher.set_error(error_code(), "message")} -> void; //so initializers can post internal errors
-    {launcher.launch(filesystem::path(), vector<string>())} -> process; //refine that so check tha parameter list, good enough for now.
+  template<class T, InputRange Args>
+  concept ProcessLauncher = requires(T launcher, const Args& a) {
+    requires ConvertibleTo<iter_value_t<Args>, string>;
+    // Takes an error_code, so initializers can report internal errors
+    { launcher.set_error(error_code(), "message") } -> void;
+    { launcher.launch(filesystem::path(), a) } -> process;
   };
 
   // The default process-launcher of the impementation
@@ -695,7 +697,7 @@ namespace std {
   // and thus listens to at least one of the hooks of the launcher. 
   // Note that the following example only uses portable hooks, but non portables might suffice as well
   template<class Init, ProcessLauncher Launcher = process_launcher>
-  concept bool ProcessInitializer =
+  concept ProcessInitializer =
        requires(Init initializer, Launcher launcher) { {initializer.on_setup(launcher)}   -> void; }
     || requires(Init initializer, Launcher launcher) { {initializer.on_success(launcher)} -> void; }
     || requires(Init initializer, Launcher launcher) { {initializer.on_error(launcher, error_code())} -> void; };
@@ -777,7 +779,7 @@ namespace std {
     int exit_code() const;
 
     // Return the system native exit code.
-    // That is on linux it contains the reason of the exit, such as can be detected by WIFSIGNALED 
+    // That is on Linux it contains the reason of the exit, such as can be detected by WIFSIGNALED 
     int native_exit_code() const;
 
     // Check if the process is running. If the process has exited already, it might store the exit_code internally.
@@ -822,7 +824,20 @@ namespace std {
 
 class process_error : public system_error {
 public:
-  using system_error::system_error;
+  // filesystem_error can take up to two paths in case of an error
+  // In the same vein, process_error can take a path or a pid
+  process_error(const string& what_arg, error_code ec);
+  process_error(const string& what_arg, 
+                const filesystem::path& path,
+                std::error_code ec);
+  process_error(const string& what_arg, 
+                pid_type pid_arg,
+                std::error_code ec);
+
+  const filesystem::path& path() const noexcept;
+  pid_type pid() const noexcept;
+
+  const char* what() const noexcept override;
 };
 
 #+END_SRC
@@ -936,8 +951,8 @@ namespace std {
     using err_default = implementation-defined;
 
     template<ProcessReadableStream In = in_default,
-              ProcessWritableStream Out = out_default,
-              ProcessWritableStream Err = err_default> 
+             ProcessWritableStream Out = out_default,
+             ProcessWritableStream Err = err_default> 
     process_io(In&& in, Out&& out, Err&& err);
     
     // Rest is implementation-defined
@@ -985,7 +1000,7 @@ namespace std {
     
     using value_type = entry;
 
-    // Note that windows uses wchar_t here, the key type should be able to be constructed from a char* though
+    // Note that Windows uses wchar_t here, the key type should be able to be constructed from a char* though
     // So it needs to be similar to filesystem::path
     using key_type   = implementation-defined; 
     using pointer    = implementation-defined;
@@ -1005,13 +1020,13 @@ namespace std {
     // Temporary folder as defined in the env
     filesystem::path temp() const;
     
-    // Shell command, see ComSpec for windows
+    // Shell command, see ComSpec for Windows
     filesystem::path shell() const;
     
     // The path variable, parsed.
     vector<filesystem::path> path() const;
     
-    // The path extensions, that mark a file as executable (empty on posix)
+    // The path extensions, that mark a file as executable (empty on POSIX)
     vector<filesystem::path> extensions() const;
 
     // Find an executable file with this name.
@@ -1052,11 +1067,11 @@ Since limit also closes the standard handles unless they are explicitly redirect
 #+BEGIN_SRC c++
 
 namespace std {
-  // Satisfies ProcessInitializers
+  // Satisfies ProcessInitializer
   class process_limit_handles {
   public:
     // Select all the handles that should be inherited even though they are not used by any initializer.
-    template<typename... Handles>
+    template<class... Handles>
     process_limit_handles(Handles&&... handles);
   };
 }
@@ -1088,7 +1103,7 @@ namespace std::this_process {
   stdio_t stdio();
 
   // Get a snapshot of all handles of the process (i.e. file descriptors on POSIX and handles on Windows) of the current process.
-  // NOTE: This function might not work on certain posix systems.
+  // NOTE: This function might not work on certain POSIX systems.
   // NOTE: On Windows version older than Windows 8 this function will iterate all the system handles, meaning it might be quite slow.
   // NOTE: This functionality is utterly prone to race conditions, since other threads might open or close handles.
   vector<native_handle_type> get_handles();
@@ -1118,13 +1133,13 @@ namespace std::this_process {
     // Temporary folder as defined in the env
     filesystem::path temp() const;
     
-    // Shell command, see ComSpec for windows
+    // Shell command, see ComSpec for Windows
     filesystem::path shell() const;
     
     // The path variable, parsed.
     vector<filesystem::path> path() const;
     
-    // The path extensions, that marka file as executable (empty on posix)
+    // The path extensions, that marka file as executable (empty on POSIX)
     vector<filesystem::path> extensions() const;
   
     // Find an executable file with this name.
@@ -1719,9 +1734,9 @@ namespace std {
     template<class CharT, class Traits = char_traits<CharT>>
     explicit operator basic_pipe_read_end<CharT, Traits>() const;
     
-    template<typename CharT = char, typename Traits = char_traits<CharT>>
+    template<class CharT = char, class Traits = char_traits<CharT>>
     basic_pipe_write_end<CharT, Traits> open();
-    template<typename CharT = char, typename Traits = char_traits<CharT>>
+    template<class CharT = char, class Traits = char_traits<CharT>>
     basic_pipe_write_end<CharT, Traits> open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
@@ -1740,8 +1755,8 @@ namespace std {
     native_handle_type native_handle() const;
 
     // Start an asynchronous read
-    template<typename MutableBufferSequence,
-             typename ReadHandler>
+    template<class MutableBufferSequence,
+             class ReadHandler>
     implementation-defined async_read_some(
         const MutableBufferSequence& buffers,
               ReadHandler&& handler);
@@ -1776,9 +1791,9 @@ namespace std {
     explicit operator basic_pipe_write_end<CharT, Traits>() const;
     
     // Open the pipe
-    template<typename CharT = char, typename Traits = char_traits<CharT>>
+    template<class CharT = char, class Traits = char_traits<CharT>>
     basic_pipe_read_end<CharT, Traits> open();
-    template<typename CharT = char, typename Traits = char_traits<CharT>>
+    template<class CharT = char, class Traits = char_traits<CharT>>
     basic_pipe_read_end<CharT, Traits> open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
@@ -1790,15 +1805,15 @@ namespace std {
     bool is_open() const;
 
     // Write some data to the handle
-    template<typename ConstBufferSequence>
+    template<class ConstBufferSequence>
     size_t write_some(const ConstBufferSequence& buffers);
     
     // Get the native handle of the source
     native_handle_type native_handle() const;
 
     // Start an asynchronous write
-    template<typename ConstBufferSequence,
-             typename WriteHandler>
+    template<class ConstBufferSequence,
+             class WriteHandler>
     implementation-defined async_write_some(
         const ConstBufferSequence& buffers,
         WriteHandler&& handler);
@@ -1928,7 +1943,7 @@ The group is aware that there maybe core changes required for this proposal to c
 
 * Acknowledgements
 
-This proposal reflects the effort of the c++ community at C++Now 2019 and afterward. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
+This proposal reflects the effort of the C++ community at C++Now 2019 and afterward. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
 
 None of this would have been possible without the work and guidance of Klemens Morgenstern, author of boost.process. 
 
@@ -1939,5 +1954,5 @@ None of this would have been possible without the work and guidance of Klemens M
 + boost.process documentation https://www.boost.org/libs/process 
 + Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
 + cppcast with Klemens on boost.process https://channel9.msdn.com/Shows/CppCast/Episode-72-BoostProcess-with-Klemens-Morgenstern
-+ Pacific c++ Klemens on boost.process design https://www.youtube.com/watch?v=uZ4IG1OfeR0
++ Pacific C++ Klemens on boost.process design https://www.youtube.com/watch?v=uZ4IG1OfeR0
 
