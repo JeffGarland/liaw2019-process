@@ -3,8 +3,12 @@
 #+Status: 
 #+Group: WG21
 #+LATEX_CLASS: article
-#+LATEX_CLASS_OPTIONS: [10pt,oneside,openany,final]
-#+Title: A proposal to add process management to the C++ standard library
+#+LATEX_CLASS_OPTIONS: [a4paper,10pt,titlepage,oneside,openany,final]
+#+LATEX_HEADER:\setcounter{tocdepth}{2}
+#+LATEX_HEADER:\usepackage[margin=0.8in]{geometry} 
+#+LATEX_HEADER:\usepackage{parskip}
+
+#+Title: D1750R0 A proposal to add process management to the C++ standard library
 #+Author: Klemens Morganstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
@@ -13,14 +17,12 @@
 Initial release.
 
 * Introduction
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on standard library wishlists going back to 2007 (Matt Austern ref below).
 
-
-The proposal is based on boost.process https://www.boost.org/libs/process which provides cross-platform implementation experience.
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wishlists]] going back to 2007. The proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
 
 * Motivation and Scope
 
-We propose a library to facilitate the following basic functionality:
+We propose a library to facilitate the following functionality:
 +    create child processes on the current machine
 +    setup streams for communication with child stdout and stderr
 +    communicate with child processes through streams
@@ -56,8 +58,9 @@ int main() {
     std::cerr << e.what();
   }
 }
-
 #+END_SRC
+
+[[https://github.com/JeffGarland/liaw2019-process/tree/master/example][Additional user examples can be seen online]]. 
 
 * Domain Terminology
 ** Processes
@@ -593,25 +596,39 @@ The name of the method in ~class process~ was discussed at length.  The name ~jo
 
 The solution provides access to the operating system, like =std::thread=, for programmers who to go beyond the provided facilities.
 
-** Portable callbacks during spawn
-*** ~on_error~
 
-On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
 
-*** ~on_success~
-TODO
-*** ~on_setup~
-TODO
+** pipe close and EOF
 
-** EOF on pipe close
+Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behaviour is not necessarily intuitive:
 
-JG TODO -- more needed or delete Is automatically delivered by the OS. 
+#+BEGIN_SRC c++
+
+boost::process::pipe p;
+
+boost::process::child c("foo", boost::process::std_in < p);
+
+#+END_SRC
+
+In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behaviour, but it is far from obvious. By using two different types this can be made more obvious, especially since aggregate initialization can be used:
+
+#+BEGIN_SRC c++
+
+auto [p_read, p_write] = std::pipe();
+std::process("foo", std::process_io(p_read));
+p_read.close();
+
+p_write.write("data", 5);
+
+#+END_SRC
+
+Note that overloading allows us to either copy or move the pipe, i.e. the given example only moves the handles without duplicating them.
 
 ** Security and User Management Implications
 
 =std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing =std::this_process::environment::shell()=.
 
-The standard process library does not touch on user management, though it can be extended to support it.
+The standard process library does not touch on user management. As with file level visibility and user access the resposibility for user permissions lies outside the standard.  For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process.  This would be reflected as ~system_error~. 
 
 ** Extensibility
 
@@ -621,21 +638,36 @@ A =ProcessLauncher= is the actual function creating the process. It can be used 
 
 A =ProcessInitializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
 
-None of this functionality should be built into the library, yet not having those customization points would greatly limit the applicability of this library.
+
+Not having these customization points would greatly limit the applicability of this library.
+
+JG TODO fix
+~on_error~
+On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
+
+~on_success~
+
+~on_setup~
+
+
 
 ** Error Handling
 
-Only done by exceptions for now, by throwing a =std::process_error=.
+Uses exceptions by throwing a =std::process_error=.  ~boost.process~ has an alternative error code based api similar to ~std::filesystem~. Field experience shows little actual usage of this api so it was not included in the proposal. 
 
-** Synchronous Versus Asynchronous
-
+** Synchronous Versus Asynchronous and Networking TS
 Synchronous process management is prone to potential deadlocks.  However used in conjunction with =std::thread= and other facilities synchronous management can be useful.  Thus the proposal supports both styles.
+
+~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors.  This proposal currently references the Networking TS for this behavior.  However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
 
 ** Integration of iostreams and pipes
 
-Pipes bring their own streams, that can be used within on process (e.g. between threads).
+Pipes bring their own streams, that can be used within a process (e.g. between threads).  Thus the proposal provides header ~pstream~ and the various pipe stream classes as a separate entity. 
 
 * Technical Specification
+
+The following represents a first draft of an annotated technical specification without formal wording.  For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
+
 ** Header ~<process>~ Synopsis
 
 #+BEGIN_SRC c++
@@ -648,7 +680,8 @@ Pipes bring their own streams, that can be used within on process (e.g. between 
 #include <vector>
  
 namespace std {
-  // A launcher is an object that has a launch function that takes a path, arguments and a variadic list of process initializers and returns a process object. 
+  // A launcher is an object that has a launch function that takes a path, 
+  // arguments and a variadic list of process initializers and returns a process object. 
   template<class T>
   concept bool ProcessLauncher = requires(T launcher) {
     {launcher.set_error(error_code(), "message")} -> void; //so initializers can post internal errors
@@ -658,8 +691,9 @@ namespace std {
   // The default process-launcher of the impementation
   class process_launcher;
   
-  // An initializer is an object that changes the behavior of a process during launch and thus listens to at least one of the hooks of the launcher. 
-  // Note that the following example only uses portable hooks, but non portables might suffic as well
+  // An initializer is an object that changes the behavior of a process during launch 
+  // and thus listens to at least one of the hooks of the launcher. 
+  // Note that the following example only uses portable hooks, but non portables might suffice as well
   template<class Init, ProcessLauncher Launcher = process_launcher>
   concept bool ProcessInitializer =
        requires(Init initializer, Launcher launcher) { {initializer.on_setup(launcher)}   -> void; }
@@ -667,7 +701,8 @@ namespace std {
     || requires(Init initializer, Launcher launcher) { {initializer.on_error(launcher, error_code())} -> void; };
   }
 
-  // This is to be defined, but should allow any stream that can yield a system-handle (e.g. pipes, files & sockets) and to close the stream by passing nullptr. 
+  // This is to be defined, but should allow any stream that can yield a system-handle 
+  // (e.g. pipes, files & sockets) and to close the stream by passing nullptr. 
   // Additionally a path should be possible to open a file just for the child process.
   concept ProcessReadableStream = TODO;
   concept ProcessWritableStream = TODO;
@@ -680,16 +715,17 @@ namespace std {
   class process;
 
   // Exception type thrown on error
-  // Can have a filesystem::path attached to it (failing before launch), or pid_type (failing after)
+  // Can have a filesystem::path attached to it (failing before launch), 
+  // or pid_type (failing after)
   class process_error;
   
   // Provides a portable wrapper for a process group
   class process_group;
   
-  // Provides an initializers for the standard io. Alternative: nested as std::process::io
+  // Provides initializers for the standard io. 
   class process_io;
   
-  // Provides a way to set the starting directory of the new process. Alternative: nested as std::process::start_dir
+  // Provides a way to set the starting directory of the new process. 
   class process_start_dir;
 
   // Satisfies ProcessInitializer
@@ -724,7 +760,8 @@ namespace std {
     // Attach to an existing process
     explicit process(pid_type& pid);
   
-    // An empty process is similar to a default constructed thread. It holds an empty handle and is a place holder for a process that is to be launched later.
+    // An empty process is similar to a default constructed thread. It holds an empty 
+    // handle and is a place holder for a process that is to be launched later.
     process() = default;
     
     // The destructor terminates 
@@ -1026,7 +1063,7 @@ namespace std {
 
 #+END_SRC
 
-** Class ~this_process~ synopsis
+** Namespace ~this_process~ 
 
 This namespace provides information about the current process.
 
@@ -1123,28 +1160,7 @@ namespace std::this_process {
 
 #+END_SRC
 
-** Extension of ~fstream~ 
-
-The standard file streams (=fstream=/=ofstream=/=ifstream=) shall have a member function that return the native handle of the opened file, so that process can use those for forwarding.
-
-#+BEGIN_SRC c++
-
-namespace std {
-  class /* basic_(o|i)*fstream */ {
-    // ...
-  public:
-    // ...
-    using native_handle_type = implementation-defined; 
-    native_handle_type native_handle() const;
-    // ...
-  };
-}
-
-#+END_SRC
-
 ** Header ~<pstream>~ Synopsis
-
-This is just the outline of the pipe header. It could be part of the <process> header, but pipes can be used without processes (e.g. between threads) so that it might be a good idea to have them in their own header.
 
 #+BEGIN_SRC c++
 
@@ -1429,31 +1445,6 @@ namespace std {
 
 #+END_SRC
 
-Compared to the ~boost.process~ implementation, this version addes classes for different pipe_ends and uses C++17 aggregate initialization.
-The reason is that the following behaviour is not necessarily intuitive:
-
-#+BEGIN_SRC c++
-
-boost::process::pipe p;
-
-boost::process::child c("foo", boost::process::std_in < p);
-
-#+END_SRC
-
-In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behaviour, but it is far from obvious. 
-By using two different types this can be made more obvious, especially since aggregate initializtion can be used:
-
-#+BEGIN_SRC c++
-
-auto [p_read, p_write] = std::pipe();
-std::process("foo", std::process_io(p_read));
-p_read.close();
-
-p_write.write("data", 5);
-
-#+END_SRC
-
-Note that overloading allows us to either copy or move the pipe, i.e. the given example only moves the handles without duplicating them.
 
 ** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ 
 
@@ -1929,27 +1920,11 @@ std::process proc("foo", std::process_io({}, ip.open(), {}));
 
 #+END_SRC
 
-
 * Open Questions
 ** Core language impact
 The group is aware that there maybe core changes required for this proposal to correctly the define the needed terminology and behavior.  None of us are expert in this and would appreciate help in this area.  Some questions the group asked include:
 - Can we piggyback on the thread's forward progress stuff for process as well? 
 - Can we assume all threads on the system behave like C++ threads?
-
-** if we don't have wait_for can we still detach? 
-
-Yes.
-
-** environment and command line
-
-Command line is ignored for now. This is a huge shell injection issue and takes a developer like 2 min. to use std::this_process::environment::shell(). Could be done as a custom launcher.
-
-*** This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments -- not singleton from 1275
-*** 1275 LEWGI in San Diego voted favoribly
-*** From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
-*** 1275 also has arguments does this work for our proposal?  The implementation is not complete for 1275. If the R1 has the environment as immutable then it will not work -- process needs to modify. 
-*** args are available before main in 1275
-
 
 * Acknowledgements
 
@@ -1958,6 +1933,8 @@ This proposal reflects the effort of the c++ community at C++Now 2019 and afterw
 None of this would have been possible without the work and guidance of Klemens Morgenstern, author of boost.process. 
 
 * References
++ Github repository for this proposal https://github.com/JeffGarland/liaw2019-process
++ Additional user examples not included in the proposal https://github.com/JeffGarland/liaw2019-process/tree/master/example
 + Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 + boost.process documentation https://www.boost.org/libs/process 
 + Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
