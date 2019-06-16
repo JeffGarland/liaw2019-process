@@ -1,0 +1,17 @@
+
+
+** Enhanced ~system~ details
+
+#+BEGIN_SRC c++
+
+template<class... Args>
+int system(Args&&... args) {
+  process c(forward<Args>(args)...,);
+  if (!c.valid())
+    return -1;
+  c.wait();
+  return c.exit_code();
+}
+
+#+END_SRC
+

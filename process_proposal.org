@@ -1,11 +1,11 @@
-
-
 #+Revision: 0
 #+Audience: LEWGI
 #+Status: 
 #+Group: WG21
+#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [10pt,oneside,openany,final]
 #+Title: A proposal to add process management to the C++ standard library
-#+Author: Klemens Morganstern, Jeff Garland, Elias Kosunen
+#+Author: Klemens Morganstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
@@ -41,8 +41,9 @@ int main() {
 
   try {
     std::ipstream pipe_stream;
-    std::process child("gcc", args,
-        std::process_io({}, pipe_stream, {})); //capture stdout, leave the others as the OS defaults
+
+    //capture stdout, leave the others as the OS defaults
+    std::process child("gcc", args, std::process_io({}, pipe_stream, {})); 
 
     std::string line;
 
@@ -250,7 +251,9 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 #+END_SRC
 
 ** Class ~process~
-*** Constructor ~process(std::filesystem::path, std::ranges::Range<String>, Inits...init)~
+*** Constructor 
+
+~process(std::filesystem::path, std::ranges::Range<String>, Inits...init)~
 
 This is the default launching function, and forwards to the ~std::process_launcher~. boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this library. This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection). Instead we require the actually used (absolute) path of the executable. Since it is common to just type a command and expect the shell to search for the executabe in the ~PATH~ environment variable, there is a helper function for that. Either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
 
@@ -591,19 +594,18 @@ The name of the method in ~class process~ was discussed at length.  The name ~jo
 The solution provides access to the operating system, like =std::thread=, for programmers who to go beyond the provided facilities.
 
 ** Portable callbacks during spawn
+*** ~on_error~
 
-*** on_error
+On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
 
-On error passes an std::error_code to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
-
-*** on_success
+*** ~on_success~
 TODO
-*** on_setup
+*** ~on_setup~
 TODO
 
 ** EOF on pipe close
 
-Is automatically delivered by the OS. 
+JG TODO -- more needed or delete Is automatically delivered by the OS. 
 
 ** Security and User Management Implications
 
@@ -627,7 +629,7 @@ Only done by exceptions for now, by throwing a =std::process_error=.
 
 ** Synchronous Versus Asynchronous
 
-Synchronous is very prone to deadlocks.
+Synchronous process management is prone to potential deadlocks.  However used in conjunction with =std::thread= and other facilities synchronous management can be useful.  Thus the proposal supports both styles.
 
 ** Integration of iostreams and pipes
 
@@ -635,8 +637,6 @@ Pipes bring their own streams, that can be used within on process (e.g. between 
 
 * Technical Specification
 ** Header ~<process>~ Synopsis
-
-This is a first cut at the wording. We probably don't need to go much deeper in the specification than the synopsis for the first paper.  I (Jeff G) basically lifted this out of boost.process::child and updated.
 
 #+BEGIN_SRC c++
 
@@ -773,7 +773,7 @@ namespace std {
     
     //The following is dependent on the networking TS. CompletionToken has the signature (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
     template<class CompletionToken>
-    DEDUCED async_wait(net::Executor& ctx, CompletionToken&& token);
+    auto async_wait(net::Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -814,7 +814,8 @@ namespace std {
     bool running() const;
 
     // Check if this handle holds a process group.
-    // NOTE: That does not mean, that the process is still running. It only means, that the handle does or did exist.
+    // NOTE: That does not mean, that the process is still running. 
+    // It only means, that the handle does or did exist.
     bool valid() const;
     explicit operator bool() const; // Equivalent to this->valid()
 
@@ -866,13 +867,15 @@ namespace std {
     template<class Clock, class Duration>
     bool wait_until_one(const chrono::time_point<Clock, Duration>& timeout_time);
     
-    // The following is dependent on the networking TS. CompletionToken has the signature (error_code) and waits for all processes to exit
+    // The following is dependent on the networking TS. CompletionToken has 
+    //the signature (error_code) and waits for all processes to exit
     template<class CompletionToken>
-    DEDUCED async_wait(net::Executor& ctx, CompletionToken&& token);
+    auto async_wait(net::Executor& ctx, CompletionToken&& token);
 
-    // The following is dependent on the networking TS. CompletionToken has the signature (error_code) and waits for one process
+    // The following is dependent on the networking TS. CompletionToken has 
+    // the signature (error_code) and waits for one process
     template<class CompletionToken>
-    DEDUCED async_wait_one(net::Executor& ctx, CompletionToken&& token);
+    auto async_wait_one(net::Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -1116,21 +1119,6 @@ namespace std::this_process {
       entry& operator=(const vector<value_type>&);
     };
   }
-}
-
-#+END_SRC
-
-** Enhanced ~system~ details
-
-#+BEGIN_SRC c++
-
-template<class... Args>
-int system(Args&&... args) {
-  process c(forward<Args>(args)...,);
-  if (!c.valid())
-    return -1;
-  c.wait();
-  return c.exit_code();
 }
 
 #+END_SRC
