@@ -227,7 +227,7 @@ Both versions make sense in their own way: on the one hand using the process con
 
 ** Concept ~ProcessInitializer~
 
-The process initializer is a class that modifies the behaviour of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependable on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
+The process initializer is a class that modifies the behaviour of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
 
 Note that the concept might look different on other implementation, since additional event hooks might exist.
 
