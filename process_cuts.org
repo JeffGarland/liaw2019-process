@@ -1,0 +1,62 @@
+#+LaTeX_HEADER:\usepackage{minted}
+#+LaTeX_HEADER:\usemintedstyle{trac}
+
+#+LATEX_HEADER:\textbf{Document Number:} & D16xxR0                      #+LATEX_HEADER:\textbf{Date:}            & \reldate                     \\
+#+LATEX_HEADER:\textbf{Reply to:}        & Jeff Garland                 \\
+#+LATEX_HEADER:                          & CrystalClear Software        \\
+#+LATEX_HEADER:                          & jeff@crystalclearsoftware.com
+
+
+** environment and command line
+
+Command line is ignored for now. This is a huge shell injection issue and takes a developer like 2 min. to use std::this_process::environment::shell(). Could be done as a custom launcher.
+
+*** This proposal provides a use case for multiple instances of environment.  For process management there is the current process and child process environments -- not singleton from 1275
+*** 1275 LEWGI in San Diego voted favoribly
+*** From Klemens: std::this_process::environment though. That would make a few things more obvious, because we have an environment class too, that shuold just be used to set it up for the subprocess.
+*** 1275 also has arguments does this work for our proposal?  The implementation is not complete for 1275. If the R1 has the environment as immutable then it will not work -- process needs to modify. 
+*** args are available before main in 1275
+
+
+
+** Enhanced ~system~ details
+
+#+BEGIN_SRC c++
+
+template<class... Args>
+int system(Args&&... args) {
+  process c(forward<Args>(args)...,);
+  if (!c.valid())
+    return -1;
+  c.wait();
+  return c.exit_code();
+}
+
+#+END_SRC
+
+
+** Extension of ~fstream~ 
+
+The standard file streams (~fstream~/~ofstream~/~ifstream~) shall have a member function that return the native handle of the opened file, so that process can use those for forwarding.
+
+#+BEGIN_SRC c++
+
+namespace std {
+  class /* basic_(o|i)*fstream */ {
+    // ...
+  public:
+    // ...
+    using native_handle_type = implementation-defined; 
+    native_handle_type native_handle() const;
+    // ...
+  };
+}
+
+#+END_SRC
+
+
+
+** if we don't have wait_for can we still detach? 
+
+Yes.
+

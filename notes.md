@@ -11,6 +11,8 @@ In Scope:
 6. Path searching (depends on `std::filesystem`) (fixing unportability)
 7. Process groups (use case: when a server/process spawns worker processes, we'd like to treat them as one entity) (the parent process isn't automatically included in any group)
 8. Children should die with the parent (if possible)
+  - on windows this is posssible using [Job Objects](https://docs.microsoft.com/en-us/windows/desktop/procthread/job-objects) [example](https://github.com/CobaltFusion/DebugViewPP/blob/master/Win32Lib/Win32Lib.cpp)
+9. Parents survive their children when they die.
 
 Not in scope:
 
