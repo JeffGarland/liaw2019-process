@@ -17,7 +17,7 @@ Initial release.
 
 * Introduction
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wish lists]] going back to 2007. The proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wish lists]] going back to 2007. This proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
 
 * Motivation and Scope
 
