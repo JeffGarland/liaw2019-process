@@ -17,7 +17,7 @@ Initial release.
 
 * Introduction
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wishlists]] going back to 2007. The proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
+The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wish lists]] going back to 2007. The proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
 
 * Motivation and Scope
 
@@ -189,7 +189,7 @@ p.on('close', (code) => {
 * Design Discussion & Examples
 ** Concept ~ProcessLauncher~
 
-The process launcher is a class that impements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
+The process launcher is a class that implements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
 And while POSIX can change a user by utilizing setuid in a ~ProcessInitializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
 
 As an example for Linux:
@@ -227,7 +227,7 @@ Both versions make sense in their own way: on the one hand using the process con
 
 ** Concept ~ProcessInitializer~
 
-The process initializer is a class that modifies the behaviour of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
+The process initializer is a class that modifies the behavior of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
 
 Note that the concept might look different on other implementation, since additional event hooks might exist.
 
@@ -255,7 +255,7 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 This is the default launching function, and forwards to ~std::process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
 This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
 Instead, we require the actually used (absolute) path of the executable.
-Since it is common to just type a command and expect the shell to search for the executabe in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
+Since it is common to just type a command and expect the shell to search for the executable in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
 
 #+BEGIN_SRC c++
 
@@ -303,7 +303,7 @@ else
 
 *** Function ~native_handle~
 
-Since there is a lot funcitonality that is not portable, the ~native_handle~ is accessible. For example, there is no clear equivalent for ~SIGTERM~ on Windows. If a user still wants to use this, they could still do so:
+Since there is a lot functionality that is not portable, the ~native_handle~ is accessible. For example, there is no clear equivalent for ~SIGTERM~ on Windows. If a user still wants to use this, they could still do so:
 
 #+BEGIN_SRC c++
 
@@ -391,7 +391,7 @@ void run_all(
 
 ** Class ~process_io~
 
-~process_io~ takes three standard handles, because some OS (Windows, that is) do not allow to cherry-pick those. Either all three are set or all are defaults.
+~process_io~ takes three standard handles, because of requirements on some operating systems. Either all three are set or all are defaults.
 
 The default, of course, is to forward it to ~std*~.
 
@@ -445,7 +445,7 @@ std::process proc("./foo", std::process(fs, {}, {});
 
 *** ~std::this_process::stdio~
 
-Since ~std::cout~ can be redirected programmatically and has the same type as ~std::cerr~ it does not seem like a proper fit, unless it's type is changed 
+Since ~std::cout~ can be redirected programmatically and has the same type as ~std::cerr~ it does not seem like a proper fit, unless the type is changed 
 
 #+BEGIN_SRC c++
 
@@ -479,7 +479,7 @@ std::process proc("./server", std::process_io(socket, socket, "log-file"));
 
 *** Null device (not yet specified)
 
-The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL"). It accepts and write, and always returns.
+The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL"). It accepts writes, and always returns.
 It might be worth it to consider adding it.
 
 #+BEGIN_SRC c++
@@ -560,7 +560,7 @@ else {
 
 *** Function ~environment::find_executable~
 
-This function shall find an executable with the name. if the OS uses file extensions it shall compare those, if not it shall check the executable flag.
+This function shall find an executable with the name. If the OS uses file extensions it shall compare those, if not it shall check the executable flag.
 
 #+BEGIN_SRC c++
 
@@ -602,7 +602,7 @@ The solution provides access to the operating system, like =std::thread=, for pr
 
 ** Pipe close and EOF
 
-Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behaviour is not necessarily intuitive:
+Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behavior is not necessarily intuitive:
 
 #+BEGIN_SRC c++
 
@@ -612,7 +612,7 @@ boost::process::child c("foo", boost::process::std_in < p);
 
 #+END_SRC
 
-In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behaviour, but it is far from obvious. By using two different types this can be made more obvious, especially since aggregate initialization can be used:
+In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behavior, but it is far from obvious. By using two different types this can be made more obvious, especially since aggregate initialization can be used:
 
 #+BEGIN_SRC c++
 
@@ -630,13 +630,13 @@ Note that overloading allows us to either copy or move the pipe, i.e. the given 
 
 =std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing =std::this_process::environment::shell()=.
 
-The standard process library does not touch on user management. As with file level visibility and user access the resposibility for user permissions lies outside the standard. For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process. This would be reflected as ~system_error~. 
+The standard process library does not touch on user management. As with file level visibility and user access the responsibility for user permissions lies outside the standard. For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process. This would be reflected as ~system_error~. 
 
 ** Extensibility
 
 To be extensible this library uses two concepts: =ProcessLauncher= and =ProcessInitializer=.
 
-A =ProcessLauncher= is the actual function creating the process. It can be used to provide platform dependent behaviour such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
+A =ProcessLauncher= is the actual function creating the process. It can be used to provide platform dependent behavior such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
 
 A =ProcessInitializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
 
@@ -685,7 +685,7 @@ namespace std {
     { launcher.launch(filesystem::path(), forward<Args>(a)) } -> process;
   };
 
-  // The default process-launcher of the impementation
+  // The default process-launcher of the implementation
   class process_launcher;
   
   // An initializer is an object that changes the behavior of a process during launch 
@@ -1113,7 +1113,7 @@ namespace std::this_process {
   template<ranges::OutputRange<native_handle_type> Rng>
   ranges::safe_iterator_t<Rng> get_handles(Rng&& r);
 
-  // Determines if a given handle is a a stream-handle, i.e. any handle that can 
+  // Determines if a given handle is a stream-handle, i.e. any handle that can 
   // be used with read and write functions.
   // Stream handles include pipes, regular files and sockets.
   bool is_stream_handle(native_handle_type handle);
