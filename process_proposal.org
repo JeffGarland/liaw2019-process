@@ -747,7 +747,8 @@ namespace std {
     template<ranges::InputRange<string> R, ProcessInitializer... Inits,
              ProcessLauncher Launcher>
     explicit process(const filesystem::path& exe,
-                     R&& args, Inits&&... inits,
+                     R&& args, 
+                     Inits&&... inits,
                      Launcher&& launcher);
   
     // Attach to an existing process
@@ -769,8 +770,8 @@ namespace std {
     // Return code of the process, only valid if !running()
     int exit_code() const;
 
-    // Return the system native exit code.
-    // That is on Linux it contains the reason of the exit, such as can be detected by WIFSIGNALED 
+    // Return the system native exit code. That is on Linux it contains the 
+    // reason of the exit, such as can be detected by WIFSIGNALED 
     int native_exit_code() const;
 
     // Check if the process is running. If the process has exited already, it might store 
