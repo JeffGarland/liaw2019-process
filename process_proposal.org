@@ -682,12 +682,11 @@ The following represents a first draft of an annotated technical specification w
 namespace std {
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
-  template<class T, InputRange Args>
-  concept ProcessLauncher = requires(T launcher, const Args& a) {
-    requires ConvertibleTo<iter_value_t<Args>, string>;
+  template<class T, ranges::InputRange<string> Args>
+  concept ProcessLauncher = requires(T launcher, Args&& a) {
     // Takes an error_code, so initializers can report internal errors
     { launcher.set_error(error_code(), "message") } -> void;
-    { launcher.launch(filesystem::path(), a) } -> process;
+    { launcher.launch(filesystem::path(), forward<Args>(a)) } -> process;
   };
 
   // The default process-launcher of the impementation
@@ -712,8 +711,8 @@ namespace std {
   // A pid_type is an identifier for a process, that satisfies StrictTotallyOrdered
   using pid_type = implementation-defined;
 
-  // Provides a portable handle to an operating system process
-  // process satisfies Movable and Boolean, but not Copyable.
+  // Provides a portable, unique handle to an operating system process
+  // Satisfies Movable and Boolean, but not Copyable.
   class process;
 
   // Exception type thrown on error
@@ -721,7 +720,7 @@ namespace std {
   // or pid_type (failing after)
   class process_error;
   
-  // Provides a portable wrapper for a process group
+  // Provides a portable, unique wrapper for a process group
   class process_group;
   
   // Provides initializers for the standard io. 
@@ -750,14 +749,12 @@ namespace std {
     using native_handle_type = implementation-defined; 
   
     // Construct a child from a property list and launch it.
-    template<ranges::InputRange R, ProcessInitializer... Inits>
-      requires ConvertibleTo<iter_value_t<R>, string>
-    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
+    template<ranges::InputRange<string> R, ProcessInitializer... Inits>
+    explicit process(const filesystem::path& exe, R&& args, Inits&&... inits);
   
     // Construct a child from a property list and launch it with a custom process launcher
-    template<ranges::InputRange R, ProcessInitializer... Inits, ProcessLauncher Launcher>
-      requires ConvertibleTo<iter_value_t<R>, string>
-    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits, Launcher&& launcher);
+    template<ranges::InputRange<string> R, ProcessInitializer... Inits, ProcessLauncher Launcher>
+    explicit process(const filesystem::path& exe, R&& args, Inits&&... inits, Launcher&& launcher);
   
     // Attach to an existing process
     explicit process(pid_type& pid);
@@ -874,14 +871,12 @@ namespace std {
     // Process management functions
 
     // Emplace a process into the group, i.e. launch it attached to the group
-    template<ranges::InputRange Args, ProcessInitializer... Inits>
-      requires ConvertibleTo<iter_value_t<Args>, string>
-    pid_type emplace(const filesystem::path& exe, const Args& args, Inits&&...inits);
+    template<ranges::InputRange<string> Args, ProcessInitializer... Inits>
+    pid_type emplace(const filesystem::path& exe, Args&& args, Inits&&...inits);
 
     // Emplace a process into the group, i.e. launch it attached to the group with a custom process launcher
-    template<ranges::InputRange Args, ProcessInitializer... Inits, ProcessLauncher Launcher>
-      requires ConvertibleTo<iter_value_t<Args>, string>
-    pid_type emplace(const filesystem::path& exe, const Args& args, Inits&&...inits, Launcher&& launcher);
+    template<ranges::InputRange<string> Args, ProcessInitializer... Inits, ProcessLauncher Launcher>
+    pid_type emplace(const filesystem::path& exe, Args&& args, Inits&&...inits, Launcher&& launcher);
 
     // Attach an existing process to the group. The process object will be empty afterwads
     pid_type attach(process&& proc);
@@ -1025,9 +1020,15 @@ namespace std {
     
     // The path variable, parsed.
     vector<filesystem::path> path() const;
+
+    template<ranges::OutputRange<filesystem::path> Rng>
+    ranges::safe_iterator_t<Rng> path(Rng&& r) const;
     
     // The path extensions, that mark a file as executable (empty on POSIX)
     vector<filesystem::path> extensions() const;
+
+    template<ranges::OutputRange<filesystem::path> Rng>
+    ranges::safe_iterator_t<Rng> extensions(Rng&& r) const;
 
     // Find an executable file with this name.
     filesystem::path find_executable(const string& name);
@@ -1039,20 +1040,27 @@ namespace std {
 
     entry();
 
-    entry& operator=(const entry&);
-    entry& operator=(entry&&);
-    
-    string string();
-    wstring wstring();
-    value_type native_string();
+    entry(const string&);
+    entry(const wstring&);
+    entry(const vector<value_type>&);
+    template<ranges::InputRange<value_type> Rng>
+    entry(Rng&& r);
 
-    // Split according to the OS specifics
-    vector<value_type> as_vector();
-    
     entry& operator=(const string&);
     entry& operator=(const wstring&);
-    
     entry& operator=(const vector<value_type>&);
+    template<ranges::InputRange<value_type> Rng>
+    entry& operator=(Rng&& r);
+
+    string as_string() const;
+    wstring as_wstring() const;
+    value_type as_native_string() const;
+
+    // Split according to the OS specifics
+    vector<value_type> as_vector() const;
+
+    template<ranges::OutputRange<string> Rng>
+    ranges::safe_iterator_t<Rng> as_range(Rng&& r) const;
   };
 }
 
@@ -1107,6 +1115,8 @@ namespace std::this_process {
   // NOTE: On Windows version older than Windows 8 this function will iterate all the system handles, meaning it might be quite slow.
   // NOTE: This functionality is utterly prone to race conditions, since other threads might open or close handles.
   vector<native_handle_type> get_handles();
+  template<ranges::OutputRange<native_handle_type> Rng>
+  ranges::safe_iterator_t<Rng> get_handles(Rng&& r);
 
   // Determines if a given handle is a a stream-handle, i.e. any handle that can be used with read and write functions.
   // Stream handles include pipes, regular files and sockets.
@@ -1137,10 +1147,14 @@ namespace std::this_process {
     filesystem::path shell() const;
     
     // The path variable, parsed.
-    vector<filesystem::path> path() const;
+    template<ranges::OutputRange<filesystem::path> Rng>
+    ranges::safe_iterator_t<Rng> path(Rng&& r) const;
     
-    // The path extensions, that marka file as executable (empty on POSIX)
+    // The path extensions, that mark a file as executable (empty on POSIX)
     vector<filesystem::path> extensions() const;
+
+    template<ranges::OutputRange<filesystem::path> Rng>
+    ranges::safe_iterator_t<Rng> extensions(Rng&& r) const;
   
     // Find an executable file with this name.
     filesystem::path find_executable(const string& name);
@@ -1153,22 +1167,24 @@ namespace std::this_process {
       entry(const string&);
       entry(const wstring&);
       entry(const vector<value_type>&);
+      template<ranges::InputRange<value_type> Rng>
+      entry(Rng&& r);
 
       entry& operator=(const string&);
       entry& operator=(const wstring&);
       entry& operator=(const vector<value_type>&);
+      template<ranges::InputRange<value_type> Rng>
+      entry& operator=(Rng&& r);
       
-      string string();
-      wstring wstring();
-      value_type native_string();
+      string as_string();
+      wstring as_wstring();
+      value_type as_native_string();
 
       // Split according to the OS specifics
       vector<value_type> as_vector();
-      
-      entry& operator=(const string&);
-      entry& operator=(const wstring&);
-      
-      entry& operator=(const vector<value_type>&);
+
+      template<ranges::OutputRange<string> Rng>
+      ranges::safe_iterator_t<Rng> as_range(Rng&& r) const;
     };
   }
 }
