@@ -199,7 +199,7 @@ As an example for Linux:
 #include <gnu_cxx_process>
 
 __gnu_cxx::vfork_launcher launcher;
-std::process my_proc("/bin/programm", {}, launcher);
+std::process my_proc("/bin/program", {}, launcher);
 
 #+END_SRC
 
@@ -208,7 +208,7 @@ or for Windows:
 #+BEGIN_SRC c++
 
 __msvc::as_user_launcher{"1234-is-not-a-safe-user-token"};
-std::process my_proc("C:\program", {}, launcher);
+std::process my_proc("C:\\program", {}, launcher);
 
 #+END_SRC
 
@@ -1171,23 +1171,9 @@ namespace std::this_process {
 #include <net> // Networking TS
 
 namespace std {
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe_read_end;
-
-  using pipe_read_end = basic_pipe_read_end<char>;
-  using wpipe_read_end = basic_pipe_read_end<wchar_t>;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe_write_end;
-
-  using pipe_write_end = basic_pipe_write_end<char>;
-  using wpipe_write_end = basic_pipe_write_end<wchar_t>;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe;
-
-  using pipe = basic_pipe<char>;
-  using wpipe = basic_pipe<wchar_t>;
+  class pipe_read_end;
+  class pipe_write_end;
+  class pipe;
 
   template<class CharT, class Traits = char_traits<CharT>>
   class basic_pipebuf;
@@ -1213,49 +1199,37 @@ namespace std {
   using pstream = basic_pstream<char>;
   using wpstream = basic_pstream<wchar_t>;
 
-  template<class CharT, class Traits>
-  struct tuple_size<basic_pipe<Char, Traits>> {
+  struct tuple_size<pipe> {
       constexpr static size_t size = 2;
   };
-  template<class CharT, class Traits>
-  struct tuple_element<0, basic_pipe<Char, Traits>> {
-      using type = basic_pipe_read_end<CharT, Traits>;
+  struct tuple_element<0, pipe> {
+      using type = pipe_read_end;
   };
-  template<class CharT, class Traits>
-  struct tuple_element<1, basic_pipe<Char, Traits>> {
-      using type = basic_pipe_write_end<CharT, Traits>;
+  struct tuple_element<1, pipe> {
+      using type = pipe_write_end;
   };
 
-  template<size_t Index, class CharT, class Traits>
-  auto get(basic_pipe<Char, Traits>&&);
-  template<size_t Index, class CharT, class Traits>
-  auto get(const basic_pipe<Char, Traits>&);
+  template<size_t Index>
+  auto get(pipe&&);
+  template<size_t Index>
+  auto get(const pipe&);
 
-  template<class CharT, class Traits>
-  basic_pipe_read_end<CharT, Traits> get<0>(const basic_pipe<Char, Traits>&);
-  template<class CharT, class Traits>
-  basic_pipe_read_end<CharT, Traits> get<0>(basic_pipe<Char, Traits>&&);
+  pipe_read_end get<0>(const pipe&);
+  pipe_read_end get<0>(pipe&&);
 
-  template<class CharT, class Traits>
-  basic_pipe_write_end<CharT, Traits> get<1>(const basic_pipe<Char, Traits>&);
-  template<class CharT, class Traits>
-  basic_pipe_write_end<CharT, Traits> get<1>(basic_pipe<Char, Traits>&&);
-
-  template<class CharT, class Traits>
-  struct tuple_size<basic_pipe<Char, Traits>> {
-      constexpr static size_t size = 2;
-  };
+  pipe_write_end<CharT, Traits> get<1>(const pipe&);
+  pipe_write_end<CharT, Traits> get<1>(pipe&&);
 
   template<class CharT, class Traits>
   struct tuple_size<basic_pstream<Char, Traits>> {
       constexpr static size_t size = 2;
   };
   template<class CharT, class Traits>
-  struct tuple_element<0, basic_pipe<Char, Traits>> {
+  struct tuple_element<0, basic_pstream<Char, Traits>> {
       using type = basic_ipstream<CharT, Traits>;
   };
   template<class CharT, class Traits>
-  struct tuple_element<1, basic_pipe<Char, Traits>> {
+  struct tuple_element<1, basic_pstream<Char, Traits>> {
       using type = basic_opstream<CharT, Traits>;
   };
 
@@ -1273,50 +1247,40 @@ namespace std {
   basic_opstream<CharT, Traits> get<1>(const basic_pstream<Char, Traits>&);
   template<class CharT, class Traits>
   basic_opstream<CharT, Traits> get<1>(basic_pstream<Char, Traits>&&);
-
-  template<class CharT, class Traits>
-  struct tuple_size<basic_pipe<Char, Traits>> {
-      constexpr static size_t size = 2;
-  };
 }
 
 #+END_SRC
 
-** Classes ~basic_pipe_read_end~, ~basic_pipe_write_end~, ~basic_pipe~ 
+** Classes ~pipe_read_end~, ~pipe_write_end~, ~pipe~ 
 
 #+BEGIN_SRC c++
 
 namespace std {
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe_read_end {
+  class pipe_read_end {
   public:
-    using char_type = CharT;
-    using traits_type = Traits;
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
     using native_handle_type = implementation-defined;
 
     // Default construct the pipe_end. Will not be opened.
-    basic_pipe_read_end();
+    pipe_read_end();
 
-    basic_pipe_read_end(native_handle_type handle);
+    pipe_read_end(native_handle_type handle);
 
-    basic_pipe_read_end(const basic_pipe_read_end& p);
-    basic_pipe_read_end(basic_pipe_read_end&& lhs);
+    pipe_read_end(const pipe_read_end& p);
+    pipe_read_end(pipe_read_end&& lhs);
 
-    basic_pipe_read_end& operator=(const basic_pipe_read_end& p);
-    basic_pipe_read_end& operator=(basic_pipe_read_end&& lhs);
+    pipe_read_end& operator=(const pipe_read_end& p);
+    pipe_read_end& operator=(pipe_read_end&& lhs);
 
     // Destructor closes the handles
-    ~basic_pipe_read_end();
+    ~pipe_read_end();
 
     native_handle_type native_handle() const;
 
     void assign(native_handle_type h);
   
     // Read data from the pipe.
-    int_type read(char_type* data, int_type count);
+    // MutableBuffer?
+    size_t read(span<byte> data);
     
     // Check if the pipe is open.
     bool is_open();
@@ -1324,36 +1288,31 @@ namespace std {
     void close();
   };
 
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe_write_end {
+  class pipe_write_end {
   public:
-    using char_type = CharT;
-    using traits_type = Traits;
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
     using native_handle_type = implementation-defined;
 
     // Default construct the pipe_end. Will not be opened.
-    basic_pipe_write_end();
+    pipe_write_end();
 
-    basic_pipe_write_end(native_handle_type handle);
+    pipe_write_end(native_handle_type handle);
 
-    basic_pipe_write_end(const basic_pipe_write_end& p);
-    basic_pipe_write_end(basic_pipe_write_end&& lhs);
+    pipe_write_end(const pipe_write_end& p);
+    pipe_write_end(pipe_write_end&& lhs);
 
-    basic_pipe_write_end& operator=(const basic_pipe_write_end& p);
-    basic_pipe_write_end& operator=(basic_pipe_write_end&& lhs);
+    pipe_write_end& operator=(const pipe_write_end& p);
+    pipe_write_end& operator=(pipe_write_end&& lhs);
 
     // Destructor closes the handles.
-    ~basic_pipe_write_end();
+    ~pipe_write_end();
 
     native_handle_type native_handle() const;
 
     void assign(native_handle_type h);
 
     // Write data to the pipe.
-    int_type write(const char_type* data, int_type count);
+    // ConstBuffer?
+    size_t write(span<const byte> data);
     
     // Check if the pipe is open.
     bool is_open();
@@ -1362,49 +1321,37 @@ namespace std {
     void close();
   };
 
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipe {
+  class pipe {
   public:
-    using char_type = CharT;
-    using traits_type = Traits;
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
-    using native_handle_type = implementation-defined;
-    
-    using read_end_type = basic_pipe_read_end<CharT, Traits>;
-    using write_end_type = basic_pipe_write_end<CharT, Traits>;
-
     // Default construct the pipe. Will be opened.
-    basic_pipe();
+    pipe();
 
-    basic_pipe(const read_end_type& read_end, const write_end_type& write_end);
-    basic_pipe(read_end_type&& read_end, write_end_type&& write_end);
+    pipe(const pipe_read_end& read_end, const pipe_write_end& write_end);
+    pipe(pipe_read_end&& read_end, pipe_write_end&& write_end);
 
     // Construct a named pipe.
-    explicit basic_pipe(const filesystem::path& name);
+    explicit pipe(const filesystem::path& name);
 
-    basic_pipe(const basic_pipe& p);
-    basic_pipe(basic_pipe&& lhs);
-
-    basic_pipe& operator=(basic_pipe&& lhs);
+    pipe(pipe&& lhs);
+    pipe& operator=(pipe&& lhs);
 
     // Destructor closes the handles
-    ~basic_pipe();
+    ~pipe();
 
+    pipe_write_end& write_end() &;
+    pipe_write_end&& write_end() &&;
+    const pipe_write_end& write_end() const &;
 
-    write_end_type& write_end() &;
-    write_end_type&& write_end() &&;
-    const write_end_type& write_end() const &;
-
-    read_end_type& read_end() &;
-    read_end_type&& read_end() &&;
-    const read_end_type& read_end() const &;
+    pipe_read_end& read_end() &;
+    pipe_read_end&& read_end() &&;
+    const pipe_read_end& read_end() const &;
 
     // Write data to the pipe
-    int_type write(const char_type* data, int_type count);
+    // ConstBuffer?
+    size_t write(span<const byte> data);
     // Read data from the pipe
-    int_type read(char_type* data, int_type count);
+    // MutableBuffer?
+    size_t read(span<byte> data);
 
     // Check if the pipe is open
     bool is_open();
@@ -1415,7 +1362,6 @@ namespace std {
 
 #+END_SRC
 
-
 ** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ 
 
 #+BEGIN_SRC c++
@@ -1423,15 +1369,15 @@ namespace std {
 namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   struct basic_pipebuf : basic_streambuf<CharT, Traits> {
-    using pipe_read_end = basic_pipe<CharT, Traits>;
-
+    usign char_type = CharT;
+    using traits_type = Traits;
     using int_type = typename Traits::int_type;
     using pos_type = typename Traits::pos_type;
     using off_type = typename Traits::off_type;
 
     constexpr static int default_buffer_size = implementation-defined;
 
-    ///Default constructor, will also construct the pipe.
+    // Default constructor, will also construct the pipe.
     basic_pipebuf();
     basic_pipebuf(const basic_pipebuf&) = default;
     basic_pipebuf(basic_pipebuf&&) = default;
@@ -1446,11 +1392,11 @@ namespace std {
     ~basic_pipebuf();
 
     // Construct/assign from a pipe
-    basic_pipebuf(const pipe_type& p);
-    basic_pipebuf(pipe_type&& p);
+    basic_pipebuf(const pipe& p);
+    basic_pipebuf(pipe& p);
 
-    basic_pipebuf& operator=(pipe_type&& p);
-    basic_pipebuf& operator=(const pipe_type& p);
+    basic_pipebuf& operator=(pipe&& p);
+    basic_pipebuf& operator=(const pipe& p);
     
     // Write characters to the associated output sequence from the put area
     int_type overflow(int_type ch = traits_type::eof()) override;
@@ -1486,8 +1432,8 @@ namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   class basic_ipstream : public basic_istream<CharT, Traits> {
   public:
-    using pipe_end_type = basic_pipe_read_end<CharT, Traits>;
-    using opposite_pipe_end_type = basic_pipe_write_end<CharT, Traits>;
+    using pipe_end_type = pipe_read_end;
+    using opposite_pipe_end_type = pipe_write_end;
 
     using char_type = CharT;
     using traits_type = Traits;
@@ -1527,7 +1473,7 @@ namespace std {
     bool is_open() const;
 
     // Open a new pipe
-    opposite_pipe_end_type ovpen();
+    opposite_pipe_end_type open();
 
     // Open a new named pipe
     opposite_pipe_end_type open(const filesystem::path& name);
@@ -1539,8 +1485,8 @@ namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   class basic_opstream : public basic_ostream<CharT, Traits> {
   public:
-    using pipe_end_type basic_pipe_write_end<CharT, Traits>;
-    using opposite_pipe_end_type = basic_pipe_read_end<CharT, Traits>;
+    using pipe_end_type = pipe_write_end;
+    using opposite_pipe_end_type = pipe_read_end;
 
     using int_type = typename Traits::int_type;
     using pos_type = typename Traits::pos_type;
@@ -1586,8 +1532,6 @@ namespace std {
   class basic_pstream : public basic_iostream<CharT, Traits> {
     mutable basic_pipebuf<CharT, Traits> _buf; // exposition-only
   public:
-    using pipe_type = basic_pipe<CharT, Traits>;
-
     using char_type   = CharT;
     using traits_type = Traits;
 
@@ -1607,15 +1551,15 @@ namespace std {
     basic_pstream& operator=(basic_pstream&& lhs);
 
     // Construct/assign from a pipe
-    basic_pstream(const pipe_type& p);
-    basic_pstream(pipe_type&& p);
+    basic_pstream(const pipe& p);
+    basic_pstream(pipe&& p);
     
-    basic_pstream& operator=(const pipe_type& p);
-    basic_pstream& operator=(pipe_type&& p);
+    basic_pstream& operator=(const pipe& p);
+    basic_pstream& operator=(pipe&& p);
     
     // Set the pipe of the streambuf
-    void pipe(const pipe_type& p);
-    void pipe(pipe_type&& p);
+    void pipe(const pipe& p);
+    void pipe(pipe&& p);
 
     // Get a reference to the pipe.
     pipe_type&       pipe() &;
@@ -1635,7 +1579,7 @@ namespace std {
 
 #+END_SRC
 
-The structure of the streams reflects the ~pipe_end~ distinction of ~basic_pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
+The structure of the streams reflects the ~pipe_end~ distinction of ~pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
 
 #+BEGIN_SRC c++
 std::ipstream is; // Not opened
