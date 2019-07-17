@@ -329,21 +329,6 @@ const bool exited_normally = WIFEXITED(proc.native_exit_code());
 
 #+END_SRC
 
-*** Function ~async_wait~
-
-To allow asynchronous operations, the process library shall integrate with the networking TS.
-
-#+BEGIN_SRC c++
-
-extern std::net::system_executor exec;
-std::process proc(std::this_environment::find_executable("gcc"), {});
-
-auto fut = proc.async_wait(exec, std::net::use_future_t());
-const bool exit_code = fut.get();
-assert(exit_code == proc.exit_code());
-
-#+END_SRC
-
 ** Class ~process_group~
 
 The process group can be used for managing several processes at once. Because of the underlying implementation on the OS, there is no guarantee that the exit-code for a process can be obtained. Because of this the `wait_one` and related functions do not yield the exit_code or pid. To make workaround easy, the launch function returns the pid, so a user can write his own code.
@@ -654,7 +639,7 @@ Uses exceptions by throwing a =std::process_error=. ~boost.process~ has an alter
 ** Synchronous Versus Asynchronous and Networking TS
 Synchronous process management is prone to potential deadlocks. However used in conjunction with =std::thread= and other facilities synchronous management can be useful. Thus the proposal supports both styles.
 
-~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors. This proposal currently references the Networking TS for this behavior. However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
+~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors.
 
 ** Integration of =iostream= and pipes
 
@@ -803,11 +788,6 @@ namespace std {
     // wait for the process to exit until a point in time.
     template<class Clock, class Duration>
     bool wait_until(const chrono::time_point<Clock, Duration>& timeout_time);
-    
-    // The following is dependent on the networking TS. CompletionToken has the signature 
-    // (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
-    template<class CompletionToken>
-    auto async_wait(net::Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -916,16 +896,6 @@ namespace std {
     // Wait for one process to exit until a point in time.
     template<class Clock, class Duration>
     bool wait_until_one(const chrono::time_point<Clock, Duration>& timeout_time);
-    
-    // The following is dependent on the networking TS. CompletionToken has 
-    //the signature (error_code) and waits for all processes to exit
-    template<class CompletionToken>
-    auto async_wait(net::Executor& ctx, CompletionToken&& token);
-
-    // The following is dependent on the networking TS. CompletionToken has 
-    // the signature (error_code) and waits for one process
-    template<class CompletionToken>
-    auto async_wait_one(net::Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -1243,10 +1213,6 @@ namespace std {
   using pstream = basic_pstream<char>;
   using wpstream = basic_pstream<wchar_t>;
 
-  class async_pipe;
-  class async_pipe_read_end;
-  class async_pipe_write_end;
-
   template<class CharT, class Traits>
   struct tuple_size<basic_pipe<Char, Traits>> {
       constexpr static size_t size = 2;
@@ -1312,34 +1278,6 @@ namespace std {
   struct tuple_size<basic_pipe<Char, Traits>> {
       constexpr static size_t size = 2;
   };
-
-  template<class CharT, class Traits>
-  struct tuple_size<async_pipe> {
-      constexpr static size_t size = 2;
-  };
-  template<class CharT, class Traits>
-  struct tuple_element<0, async_pipe> {
-      using type = async_pipe_read_end;
-  };
-  template<class CharT, class Traits>
-  struct tuple_element<1, async_pipe> {
-      using type = async_pipe_write_end;
-  };
-
-  template<size_t Index, class CharT, class Traits>
-  auto get(const async_pipe&);
-  template<size_t Index, class CharT, class Traits>
-  auto get(async_pipe&&);
-
-  template<class CharT, class Traits>
-  async_pipe_read_end get<0>(const async_pipe&);
-  template<class CharT, class Traits>
-  async_pipe_read_end get<0>(async_pipe&&);
-
-  template<class CharT, class Traits>
-  async_pipe_write_end get<1>(const async_pipe&);
-  template<class CharT, class Traits>
-  async_pipe_write_end get<1>(async_pipe&&);
 }
 
 #+END_SRC
@@ -1715,249 +1653,6 @@ Or to be used in a process
 #+BEGIN_SRC c++
 std::ipstream is; // Not opened
 std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be read from is
-#+END_SRC
-
-** Classes ~async_pipe_read_end~, ~async_pipe_write_end~, ~async_pipe~ 
-
-#+BEGIN_SRC c++
-
-// The following is dependent on the networking TS
-namespace std {
-  class async_pipe_read_end {
-  public:
-  using native_handle_type = implementation-defined;
-
-    async_pipe_read_end(net::Executor& ios);
-    async_pipe_read_end(net::Executor& ios, native_handle_type native_handle);
-
-    async_pipe_read_end(const async_pipe_read_end& lhs);
-    async_pipe_read_end(async_pipe_read_end&& lhs);
-
-    async_pipe_read_end& operator=(const async_pipe_read_end& lhs);
-    async_pipe_read_end& operator=(async_pipe_read_end&& lhs);
-
-    // Construct form pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_read_end(net::Executor& ios, 
-                                 const basic_pipe_read_end<CharT, Traits>& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    inline async_pipe_read_end& operator=(const basic_pipe_read_end<CharT, Traits>& p);
-
-    // Destructor closes the pipe handles
-    ~async_pipe_read_end();
-
-    // Explicit conversion operator to basic_pipe
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_read_end<CharT, Traits>() const;
-    
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open(const filesystem::path& path);
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    void close();
-
-    // Check if the pipe end is open
-    bool is_open() const;
-
-    // Read some data from the handle.
-    // See the Networking TS for more details.
-    template<class MutableBufferSequence>
-    size_t read_some(const MutableBufferSequence& buffers);
-
-    native_handle_type native_handle() const;
-
-    // Start an asynchronous read
-    template<class MutableBufferSequence,
-             class ReadHandler>
-    implementation-defined async_read_some(
-        const MutableBufferSequence& buffers,
-              ReadHandler&& handler);
-  };
-
-  class async_pipe_write_end {
-  public:
-    using native_handle_type = implementation-defined;
-
-    async_pipe_write_end(net::Executor& ios);
-    async_pipe_write_end(net::Executor& ios, native_handle_type native_handle);
-
-    async_pipe_write_end(const async_pipe_write_end& lhs);
-    async_pipe_write_end(async_pipe_write_end&& lhs);
-
-    async_pipe_write_end& operator=(const async_pipe_write_end& lhs);
-    async_pipe_write_end& operator=(async_pipe_write_end&& lhs);
-
-    // Construct from pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_write_end(net::Executor& ios, 
-                                  const basic_pipe_write_end<CharT, Traits>& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe_write_end& operator=(const basic_pipe_write_end<CharT, Traits>& p);
-
-    // Destructor closes the pipe handles
-    ~async_pipe_write_end();
-
-    // Explicit conversion operator to basic_pipe
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_write_end<CharT, Traits>() const;
-    
-    // Open the pipe
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open(const filesystem::path& path);
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    void close();
-
-    // Check if the pipe end is open
-    bool is_open() const;
-
-    // Write some data to the handle
-    template<class ConstBufferSequence>
-    size_t write_some(const ConstBufferSequence& buffers);
-    
-    // Get the native handle of the source
-    native_handle_type native_handle() const;
-
-    // Start an asynchronous write
-    template<class ConstBufferSequence,
-             class WriteHandler>
-    implementation-defined async_write_some(
-        const ConstBufferSequence& buffers,
-        WriteHandler&& handler);
-  };
-
-  // Class for async I/O with the Networking TS
-  // Can be used directly with net::async_read/write
-  class async_pipe {
-  public:
-    using native_handle_type = implementation-defined;
-
-    // Construct a new async_pipe
-    // Automatically opens the pipe
-    // Initializes source and sink with the same net::Executor
-    // NOTE: Windows creates a named pipe here, where the name is automatically generated.
-    async_pipe(net::Executor& ios);
-
-    // NOTE: Windows restricts possible names
-    async_pipe(net::Executor& ios, const filesystem::path& name);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    async_pipe(const async_pipe& lhs);
-    async_pipe(async_pipe&& lhs);
-
-    async_pipe& operator=(const async_pipe& lhs);
-    async_pipe& operator=(async_pipe&& lhs);
-
-    // Construct from a pipe
-    // @note Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe(net::Executor& ios, const basic_pipe<CharT, Traits>& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe& operator=(const basic_pipe<CharT, Traits>& p);
-
-    // Returns a copied pipe read end
-    const async_pipe_read_end&  read_end() const &;
-          async_pipe_read_end&& read_end() &&;
-
-    // Returns a copied pipe write end
-    const async_pipe_write_end&  write_end() const &;
-          async_pipe_write_end&& write_end() &&;
-
-    // Destructor, closes the pipe handles
-    ~async_pipe();
-
-    // Explicit conversion operator to basic_pipe
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe<CharT, Traits>() const;
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    // Close the pipe handles
-    void close();
-
-    // Check if the pipes are open
-    bool is_open() const;
-
-    // Read some data from the handle.
-    // See the Networking TS for more details.
-    template<class MutableBufferSequence>
-    size_t read_some(const MutableBufferSequence& buffers);
-
-    // Write some data to the handle.
-    // See the Networking TS for more details.
-    template<class ConstBufferSequence>
-    size_t write_some(const ConstBufferSequence& buffers);
-
-    native_handle native_source() const;
-    native_handle native_sink() const;
-
-    // Start an asynchronous read
-    template<class MutableBufferSequence,
-             class ReadHandler>
-    implementation-defined async_read_some(
-        const MutableBufferSequence& buffers,
-        ReadHandler&& handler);
-
-    // Start an asynchronous write
-    template<class ConstBufferSequence,
-             class WriteHandler>
-    implementation-defined async_write_some(
-        const ConstBufferSequence& buffers,
-        WriteHandler&& handler);
-  };
-};
-}
-
-#+END_SRC
-
-~async_pipe~ is structured similar to the ~basic_pipe~ triple. The ~async_pipe_end*::open~ returns a ~basic_pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-std::async_pipe_read_end ip{exec}; // Not opened
-// After next line ip & op point to the same pipe, though can use different executors.
-std::async_pipe_read_end op{exec, ip.open()}; 
-
-#+END_SRC
-
-Or using aggregate initialization:
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-auto [ip, op] = std::async_pipe(exec);
-
-#+END_SRC
-
-Or to be used in a process
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-std::async_pipe_read_end ip{exec}; 
-std::process proc("foo", std::process_io({}, ip.open(), {}));
-
 #+END_SRC
 
 * Open Questions
