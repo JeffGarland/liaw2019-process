@@ -43,8 +43,8 @@ int main() {
   try {
     std::ipstream pipe_stream;
 
-    //capture stdout, leave the others as the OS defaults
-    std::process child("gcc", args, std::process_io({}, pipe_stream, {})); 
+    // Capture stdout, leave the others as the OS defaults
+    std::process child("/usr/bin/g++", args, std::process_io({}, pipe_stream, {})); 
 
     std::string line;
 
@@ -92,7 +92,7 @@ C and C++ currently provide a minimal process launching capability via the =syst
 
 int result = system("echo \"foo\" > bar.txt");
 if (result == 0) {
-  //success
+  // Success
 }
 
 #+END_SRC
@@ -187,10 +187,10 @@ p.on('close', (code) => {
 #+END_SRC
 
 * Design Discussion & Examples
-** Concept ~ProcessLauncher~
+** Concept ~process_launcher~
 
 The process launcher is a class that implements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
-And while POSIX can change a user by utilizing setuid in a ~ProcessInitializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
+And while POSIX can change a user by utilizing setuid in a ~process_initializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
 
 As an example for Linux:
 
@@ -218,14 +218,14 @@ Furthermore, the fact that the launcher has a well-specified ~launch~ function a
 
 #+BEGIN_SRC c++
 
-std::process_launcher launcher;
+std::default_process_launcher launcher;
 auto proc = launcher.launch("/bin/foo", {});
 
 #+END_SRC
 
 Both versions make sense in their own way: on the one hand using the process constructor fits well in with the STL and it's RAII classes like thread. On the other hand it actually uses a factory-class, which can be used so explicitly.
 
-** Concept ~ProcessInitializer~
+** Concept ~process_initializer~
 
 The process initializer is a class that modifies the behavior of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
 
@@ -236,7 +236,7 @@ Note that the concept might look different on other implementation, since additi
 struct switch_user {
   ::uid_t uid;
 
-  template<ProcessLauncher Launcher>
+  template<process_launcher Launcher>
   // Linux specific event, after the successful fork, called from the child process
   void on_exec_setup(Launcher&) {
     ::setuid(this->uid);
@@ -250,9 +250,9 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 ** Class ~process~
 *** Constructor 
 
-~process(std::filesystem::path, std::ranges::Range, Inits... init)~
+~process(const std::filesystem::path&, const std::ranges::InputRange&, Inits&&... init)~
 
-This is the default launching function, and forwards to ~std::process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
+This is the default launching function, and forwards to ~std::default_process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
 This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
 Instead, we require the actually used (absolute) path of the executable.
 Since it is common to just type a command and expect the shell to search for the executable in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
@@ -269,7 +269,7 @@ std::process(std::this_process::environment::shell(), {"/c", "git --version"});
 
 #+END_SRC
 
-Another solution is for a user to provide their own ~ProcessLauncher~ as a ~ShellLauncher~.
+Another solution is for a user to provide their own ~process_launcher~ as a ~shell_launcher~.
 
 *** Function ~wait~
 
@@ -514,7 +514,7 @@ Thus this proposal makes the ambiguity explicit.
 
 #+BEGIN_SRC c++
 
-//make upper case
+// Make upper case
 std::string to_upper(const std::string& in); 
 
 auto keys = env.keys(); 
@@ -564,7 +564,7 @@ This function shall find an executable with the name. If the OS uses file extens
 
 #+BEGIN_SRC c++
 
-//finds a file, but is not executable
+// Finds a file, but is not executable
 auto pt = std::this_process::environment::find_executable("readme.txt"); 
 assert(pt.empty());
 
@@ -584,8 +584,8 @@ This is solved through the extended launcher concept.
 #+BEGIN_SRC c++
 
 // These are the same:
-process(...) : process(process_launcher.launch(...)) {}
-process_launcher().launch(...) -> process;
+process(...) : process(default_process_launcher.launch(...)) {}
+default_process_launcher().launch(...) -> process;
 
 // These are the same:
 process(..., custom_launcher& cl) : process(cl.launch) {}
@@ -634,15 +634,15 @@ The standard process library does not touch on user management. As with file lev
 
 ** Extensibility
 
-To be extensible this library uses two concepts: =ProcessLauncher= and =ProcessInitializer=.
+To be extensible this library uses two concepts: =process_launcher= and =process_initializer=.
 
-A =ProcessLauncher= is the actual function creating the process. It can be used to provide platform dependent behavior such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
+A =process_launcher= is the actual function creating the process. It can be used to provide platform dependent behavior such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
 
-A =ProcessInitializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
+A =process_initializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
 
 Not having these customization points would greatly limit the applicability of this library.
 
-The =ProcessLauncher= has three methods that must be provided by a custom launcher.  These are:
+The =process_launcher= has three methods that must be provided by a custom launcher.  These are:
 + ~on_setup~   - calls the initializer before attempting to launch
 + ~on_success~ - calls the initializer after successful process launch
 + ~on_error~ - On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
@@ -678,22 +678,23 @@ The following represents a first draft of an annotated technical specification w
 namespace std {
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
-  template<class T, ranges::InputRange<string> Args>
-  concept ProcessLauncher = requires(T launcher, Args&& a) {
+  template<class T, ranges::InputRange Args>
+  concept process_launcher = requires(T launcher, const Args& a) {
+    requires ConvertibleTo<ranges::iter_value_t<Args>, string>;
     // Takes an error_code, so initializers can report internal errors
     { launcher.set_error(error_code(), "message") } -> void;
-    { launcher.launch(filesystem::path(), forward<Args>(a)) } -> process;
+    { launcher.launch(filesystem::path(), a) } -> process;
   };
 
   // The default process-launcher of the implementation
-  class process_launcher;
+  class default_process_launcher;
   
   // An initializer is an object that changes the behavior of a process during launch 
   // and thus listens to at least one of the hooks of the launcher. 
   // Note that the following example only uses portable hooks, but non portables 
   // might suffice as well
-  template<class Init, ProcessLauncher Launcher = process_launcher>
-  concept ProcessInitializer =
+  template<class Init, process_launcher Launcher = default_process_launcher>
+  concept process_initializer =
        requires(Init initializer, Launcher launcher) 
        { {initializer.on_setup(launcher)}   -> void; }
     || requires(Init initializer, Launcher launcher) 
@@ -720,10 +721,10 @@ namespace std {
   // Provides initializers for the standard io. 
   class process_io;
 
-  // Satisfies ProcessInitializer
+  // Satisfies process_initializer
   class environment;
   
-  // Satisfies ProcessInitializer
+  // Satisfies process_initializer
   class process_limit_handles;
 }
 
@@ -740,23 +741,28 @@ namespace std {
     using native_handle_type = implementation-defined; 
   
     // Construct a child from a property list and launch it.
-    template<ranges::InputRange<string> R, ProcessInitializer... Inits>
-    explicit process(const filesystem::path& exe, R&& args, Inits&&... inits);
+    template<ranges::InputRange R, process_initializer... Inits>
+      requires ConvertibleTo<ranges::iter_value_t<Args>, string>
+    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
   
     // Construct a child from a property list and launch it with a custom process launcher
-    template<ranges::InputRange<string> R, ProcessInitializer... Inits,
-             ProcessLauncher Launcher>
+    template<ranges::InputRange R, process_initializer... Inits,
+             process_launcher Launcher>
+      requires ConvertibleTo<ranges::iter_value_t<Args>, string>
     explicit process(const filesystem::path& exe,
-                     R&& args, 
+                     const R& args,
                      Inits&&... inits,
                      Launcher&& launcher);
   
     // Attach to an existing process
-    explicit process(pid_type& pid);
+    explicit process(const pid_type& pid);
   
     // An empty process is similar to a default constructed thread. It holds an empty 
     // handle and is a place holder for a process that is to be launched later.
     process() = default;
+
+    process(process&&) = default;
+    process& operator=(process&&) = default;
     
     // The destructor terminates 
     ~process();
@@ -869,13 +875,13 @@ namespace std {
     // Process management functions
 
     // Emplace a process into the group, i.e. launch it attached to the group
-    template<ranges::InputRange<string> Args, ProcessInitializer... Inits>
+    template<ranges::InputRange<string> Args, process_initializer... Inits>
     pid_type emplace(const filesystem::path& exe, Args&& args, Inits&&...inits);
 
     // Emplace a process into the group, i.e. launch it attached to the group with
     // a custom process launcher
-    template<ranges::InputRange<string> Args, ProcessInitializer... Inits,
-             ProcessLauncher Launcher>
+    template<ranges::InputRange<string> Args, process_initializer... Inits,
+             process_launcher Launcher>
     pid_type emplace(const filesystem::path& exe,
                      Args&& args, Inits&&...inits,
                      Launcher&& launcher);
@@ -938,7 +944,7 @@ namespace std {
 namespace std {
   // This class describes I/O redirection for the standard streams (stdin, stdout, stderr).
   // They all are to be set, because Windows either inherits all or all need to be set. 
-  // Satisfies ProcessInitializer
+  // Satisfies process_initializer
   class process_io {
   public:
     // OS dependent handle type
@@ -962,12 +968,12 @@ namespace std {
 
 ** Class ~environment~
 
-An environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies ProcessInitializers
+An environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies process_initializer
 
 #+BEGIN_SRC c++
 
 namespace std {
-  // Satisfies ProcessInitializer
+  // Satisfies process_initializer
   class environment {
   public:
     using native_environment_type = implementation-defined;
@@ -1066,7 +1072,7 @@ Since limit also closes the standard handles unless they are explicitly redirect
 #+BEGIN_SRC c++
 
 namespace std {
-  // Satisfies ProcessInitializer
+  // Satisfies process_initializer
   class process_limit_handles {
   public:
     // Select all the handles that should be inherited even though they are not 
