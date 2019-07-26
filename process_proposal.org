@@ -250,7 +250,7 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 ** Class ~process~
 *** Constructor 
 
-~process(const std::filesystem::path&, const std::ranges::input_range&, Inits&&... init)~
+~process(const std::filesystem::path&, const argument-list&, Inits&&... init)~
 
 This is the default launching function, and forwards to ~std::default_process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
 This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
@@ -676,9 +676,17 @@ The following represents a first draft of an annotated technical specification w
 #include <vector>
  
 namespace std {
+  // exposition-only
+  // Command line argument list
+  template <ranges::input_range R>
+  concept argument-list =
+    requires convertible_to<ranges::iter_value_t<R>, string> ||
+    requires convertible_to<ranges::iter_value_t<R>, wstring> ||
+    requires convertible_to<ranges::iter_value_t<R>, u8string>;
+
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
-  template<class T, ranges::input_range Args>
+  template<class T, argument-list Args>
   concept process_launcher = requires(T launcher, const Args& a) {
     requires convertible_to<ranges::iter_value_t<Args>, string>;
     // Takes an error_code, so initializers can report internal errors
@@ -741,14 +749,12 @@ namespace std {
     using native_handle_type = implementation-defined; 
   
     // Construct a child from a property list and launch it.
-    template<ranges::input_range R, process_initializer... Inits>
-      requires convertible_to<ranges::iter_value_t<Args>, string>
+    template<argument-list R, process_initializer... Inits>
     explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
   
     // Construct a child from a property list and launch it with a custom process launcher
-    template<ranges::input_range R, process_initializer... Inits,
+    template<argument-list R, process_initializer... Inits,
              process_launcher Launcher>
-      requires convertible_to<ranges::iter_value_t<Args>, string>
     explicit process(const filesystem::path& exe,
                      const R& args,
                      Inits&&... inits,
@@ -875,17 +881,16 @@ namespace std {
     // Process management functions
 
     // Emplace a process into the group, i.e. launch it attached to the group
-    template<ranges::input_range Args, process_initializer... Inits>
-      requires convertible_to<ranges::iter_value_t<Args>, string>
+    template<argument-list Args, process_initializer... Inits>
     pid_type emplace(const filesystem::path& exe, Args&& args, Inits&&...inits);
 
     // Emplace a process into the group, i.e. launch it attached to the group with
     // a custom process launcher
-    template<ranges::input_range Args, process_initializer... Inits,
+    template<argument-list Args, process_initializer... Inits,
              process_launcher Launcher>
       requires convertible_to<ranges::iter_value_t<Args>, string>
     pid_type emplace(const filesystem::path& exe,
-                     Args&& args, Inits&&...inits,
+                     const Args& args, Inits&&...inits,
                      Launcher&& launcher);
 
     // Attach an existing process to the group. The process object will be empty afterwards
