@@ -1,4 +1,4 @@
-#+Revision: 0
+#+Revision: 1
 #+Audience: LEWGI
 #+Status: 
 #+Group: WG21
@@ -8,11 +8,15 @@
 #+LATEX_HEADER:\usepackage[margin=0.8in]{geometry} 
 #+LATEX_HEADER:\usepackage{parskip}
 
-#+Title: D1750R0 A Proposal to Add Process Management to the C++ Standard Library
+#+Title: D1750R1 A Proposal to Add Process Management to the C++ Standard Library
 #+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
+** R1
+TODO
+
+** R0
 Initial release.
 
 * Introduction
@@ -346,7 +350,7 @@ assert(exit_code == proc.exit_code());
 
 ** Class ~process_group~
 
-The process group can be used for managing several processes at once. Because of the underlying implementation on the OS, there is no guarantee that the exit-code for a process can be obtained. Because of this the `wait_one` and related functions do not yield the exit_code or pid. To make workaround easy, the launch function returns the pid, so a user can write his own code.
+The process group can be used for managing several processes at once. Because of the underlying implementation on the OS, there is no guarantee that the exit-code for a process can be obtained. Because of this the ~wait_one~ and related functions do not yield the ~exit_code~ or pid. To make workaround easy, the launch function returns the pid, so a user can write his own code.
 
 *** Example: Attaching a debugger to a process and grouping them.
 
