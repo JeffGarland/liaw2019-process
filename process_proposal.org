@@ -692,15 +692,15 @@ namespace std {
   // Command line argument list
   template <ranges::input_range R>
   concept process-argument-list =
-    requires convertible_to<ranges::iter_value_t<R>, string> ||
-    requires convertible_to<ranges::iter_value_t<R>, wstring> ||
-    requires convertible_to<ranges::iter_value_t<R>, u8string>;
+    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, string> ||
+    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, wstring> ||
+    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, u8string>;
 
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
   template<class T, process-argument-list Args>
   concept process_launcher = requires(T launcher, const Args& a) {
-    requires convertible_to<ranges::iter_value_t<Args>, string>;
+    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Args>>, string>;
     // Takes an error_code, so initializers can report internal errors
     { launcher.set_error(error_code(), "message") } -> void;
     { launcher.launch(filesystem::path(), a) } -> process;
@@ -900,7 +900,7 @@ namespace std {
     // a custom process launcher
     template<process-argument-list Args, process_initializer... Inits,
              process_launcher Launcher>
-      requires convertible_to<ranges::iter_value_t<Args>, string>
+      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Args>>, string>
     pid_type emplace(const filesystem::path& exe,
                      const Args& args, Inits&&...inits,
                      Launcher&& launcher);
@@ -1036,13 +1036,13 @@ namespace std {
     vector<filesystem::path> path() const;
 
     template<output_iterator OutputIt>
-    ranges::safe_iterator_t<Rng> path(OutputIt it) const;
+    OutputIt path(OutputIt it) const;
     
     // The path extensions, that mark a file as executable (empty on POSIX)
     vector<filesystem::path> extensions() const;
 
     template<ranges::output_iterator It>
-    ranges::safe_iterator_t<Rng> extensions(It it) const;
+    OutputIt extensions(It it) const;
 
     // Find an executable file with this name.
     filesystem::path find_executable(const string& name);
@@ -1059,7 +1059,7 @@ namespace std {
     entry(const wstring&);
     entry(const vector<value_type>&);
     template<ranges::input_range Rng>
-      requires convertible_to<ranges::iter_value_t<Rng>, value_type>
+      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
     entry(const Rng& r);
 
     entry& operator=(string_view);
@@ -1067,7 +1067,7 @@ namespace std {
     entry& operator=(const wstring&);
     entry& operator=(const vector<value_type>&);
     template<ranges::input_range Rng>
-      requires convertible_to<ranges::iter_value_t<Rng>, value_type>
+      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
     entry& operator=(const Rng& r);
 
     string as_string() const;
@@ -1194,7 +1194,7 @@ namespace std::this_process {
       entry(const wstring&);
       entry(const vector<value_type>&);
       template<ranges::input_range Rng>
-        requires convertible_to<ranges::iter_value_t<Rng>, value_type>
+        requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
       entry(const Rng& r);
 
       entry& operator=(string_view);
@@ -1202,7 +1202,7 @@ namespace std::this_process {
       entry& operator=(const wstring&);
       entry& operator=(const vector<value_type>&);
       template<ranges::input_range Rng>
-        requires convertible_to<ranges::iter_value_t<Rng>, value_type>
+        requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
       entry& operator=(const Rng& r);
       
       string as_string();
