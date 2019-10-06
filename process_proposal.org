@@ -14,6 +14,8 @@
 
 * Revision History
 ** R1
++   Added section of review questions and dicussion to record committee discussion
++   LEWGI feedback: can native_exit_code and exit_code be combined?
 +   LEWGI feedback: remove process::operator bool
 +   LEWGI feedback: dropped process_group
 +   LEWGI feedback: remove native_handles from pipes
@@ -222,6 +224,11 @@ p.on('close', (code) => {
 });
 
 #+END_SRC
+
+* Review Questions and Discussion
+** Investigate combining exit_code and native_exit_code
+
+This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for exit_code is so you can write portable cross-platform code. The reason for native_exit_code is so you can write platform specific code.
 
 * Design Discussion & Examples
 ** Concept ~process_launcher~
