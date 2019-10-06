@@ -14,7 +14,7 @@
 
 * Revision History
 ** R1
-
++   LEWGI feedback: remove process::operator bool
 +   LEWGI feedback: dropped process_group
 +   SG1 feedback: added a section on other c++ libraries with process management 
 +   Make `pipe` a concrete, byte-based type, instead of a template over a character type
@@ -782,7 +782,6 @@ namespace std {
     // NOTE: That does not mean, that the process is still running. It only means, that 
     // the handle does or did exist.
     bool valid() const;
-    explicit operator bool() const; // Equivalent to this->valid()
   
     // Process management functions
   
