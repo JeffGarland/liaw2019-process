@@ -14,19 +14,19 @@
 
 * Revision History
 ** R1
-+   Added section of review questions and dicussion to record committee discussion
-+   LEWGI feedback: can native_exit_code and exit_code be combined?
-+   LEWGI feedback: remove process::operator bool
-+   LEWGI feedback: dropped process_group
-+   LEWGI feedback: remove native_handles from pipes
++   Added section of review questions and dicussion to record committee discussions
++   LEWGI feedback: can ~native_exit_code~ and ~exit_code~ be combined?
++   LEWGI feedback: remove ~process::operator~ bool
++   LEWGI feedback: dropped ~process_group~
++   LEWGI feedback: remove ~native_handles~ from pipes
 +   SG1 feedback: added a section on other c++ libraries with process management 
-+   Make `pipe` a concrete, byte-based type, instead of a template over a character type. Removed basic_pipe.
-+   Remove `char_traits` and type aliases based on it from `pipe`
-+   Make `pipe::read` and `pipe::write` take a `span` instead of a pointer and a size
-+   `snake_case` concepts, `process_launcher` -> `default_process_launcher` to avoid collisions
-+   Add exposition-only `process-argument-list` concept
-+   Fix Range-based templates, adding `requires`-clauses
-+   Fix `tuple_element` and `get` specializations for `pipe` and `pstream`
++   Make `pipe` a concrete, byte-based type, instead of a template over a character type. Removed ~basic_pipe~.
++   Remove ~char_traits~ and type aliases based on it from ~pipe~
++   Make ~pipe::read~ and ~pipe::write~ take a ~span~ instead of a pointer and a size
++   ~snake_case~ concepts, ~process_launcher~ -> ~default_process_launcher~ to avoid collisions
++   Add exposition-only ~process-argument-list~ concept
++   Fix Range-based templates, adding ~requires~-clauses
++   Fix ~tuple_element~ and ~get~ specializations for ~pipe~ and ~pstream~
 +   Numerous editorial fixes
 
 ** R0
@@ -226,9 +226,58 @@ p.on('close', (code) => {
 #+END_SRC
 
 * Review Questions and Discussion
-** Investigate combining exit_code and native_exit_code
+** Investigate combining ~exit_code~ and ~native_exit_code~
 
-This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for exit_code is so you can write portable cross-platform code. The reason for native_exit_code is so you can write platform specific code.
+This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for ~exit_code~ is so you can write portable cross-platform code. The reason for ~native_exit_code~ is so you can write platform specific code.
+
+** Investigate a non-exception api for error handling
+
+This question was raised in LEWGI in Cologne.  It's clear that the library can provide an api that uses error codes instead of exceptions.  This would look something like the following:
+
+#+BEGIN_SRC c++
+
+namspace std { 
+
+struct process_make_ret {
+   process    a_process;
+   error_code error;
+};
+
+class process {
+   friend make_process_ret make_process(...);
+public:
+    process(...);
+};
+
+process_make_ret  make_process(...);
+#+END_SRC
+
+The unfortunate result is an api inconsistency with ~std::jthread~ and ~std::thread~, which are similar in usage to ~process~. 
+
+Alternatively, users can write there own wrapper using the current proposal since process supports default construction and a ~valid~ check. 
+
+#+BEGIN_SRC c++
+
+//user code
+
+struct process_make_ret {
+   process_make_ret() = default;
+   std::process    a_process;
+   std::error_code error;
+};
+
+process_make_ret  make_process(...) {
+  process_make_ret ret;
+  try {
+     ret_.a_process = std::process( ... );
+  }
+  catch (std::system_error& err) {
+     ret_.a_error = err.code(); 
+  }
+}
+#+END_SRC
+
+
 
 * Design Discussion & Examples
 ** Concept ~process_launcher~
