@@ -282,8 +282,19 @@ process_make_ret  make_process(...) {
 }
 #+END_SRC
 
+** ~process~ destructor should not terminate
 
-** Can ~std::process and std::thread be used in generic code?
+SG1 in Cologne discussed the behavior of the ~process~ destructor at length. The originally proposed behavior would terminate the program if ~wait~ had not been called.  The over arching backdrop of SG1 discussion was that ~std::thread~ destructor calling terminate was a poor design choice that was not to be repeated.
+
+The authors would like committee guidance and discussion of some possible options.  Including:
+- call ~process::terminate~ on child
+- call ~wait~ by default the destructor
+- add some sort of ~request_stop~ interface to process to mirror ~jthread~ api
+- a constructor option to pick from pre-defined behaviors like ~wait~ or ~detach~
+
+Note that calling ~wait~ in the destructor can also cause poor behavior if the child process never exits. This, however, is similar to the problem with ~jthread::join~ if the user fails to implement coorperative shutdown logic.
+
+** Can ~std::process~ and ~std::thread~ be used in generic code?
 Discussed in some length in SG1 in Cologne with the general conclusion that this proposal does not provide that feature.  While there was weak support for the idea the domains are different enough that it was deemed to be at least difficult.  Advice was to not pursue this issue further.
 ** Forward progress and core language impact
 This was discussed at length by SG1 in Cologne. The question that started the discussion:
@@ -755,7 +766,7 @@ namespace std {
     process(process&&) = default;
     process& operator=(process&&) = default;
     
-    // The destructor terminates 
+    // tbd behavior
     ~process();
   
     // Accessors 
