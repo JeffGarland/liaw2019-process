@@ -16,8 +16,9 @@
 ** R1
 +   LEWGI feedback: remove process::operator bool
 +   LEWGI feedback: dropped process_group
++   LEWGI feedback: remove native_handles from pipes
 +   SG1 feedback: added a section on other c++ libraries with process management 
-+   Make `pipe` a concrete, byte-based type, instead of a template over a character type
++   Make `pipe` a concrete, byte-based type, instead of a template over a character type. Removed basic_pipe.
 +   Remove `char_traits` and type aliases based on it from `pipe`
 +   Make `pipe::read` and `pipe::write` take a `span` instead of a pointer and a size
 +   `snake_case` concepts, `process_launcher` -> `default_process_launcher` to avoid collisions
@@ -1117,7 +1118,7 @@ namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   class basic_pipebuf;
 
-  using pipebuf = basic_pipebuf<char>;
+  using pipebuf  = basic_pipebuf<char>;
   using wpipebuf = basic_pipebuf<wchar_t>;
 
   template<class CharT, class Traits = char_traits<CharT>>
@@ -1227,12 +1228,9 @@ namespace std {
 namespace std {
   class pipe_read_end {
   public:
-    using native_handle_type = implementation-defined;
 
     // Default construct the pipe_end. Will not be opened.
     pipe_read_end();
-
-    pipe_read_end(native_handle_type handle);
 
     pipe_read_end(const pipe_read_end& p);
     pipe_read_end(pipe_read_end&& lhs);
@@ -1243,12 +1241,7 @@ namespace std {
     // Destructor closes the handles
     ~pipe_read_end();
 
-    native_handle_type native_handle() const;
-
-    void assign(native_handle_type h);
-  
     // Read data from the pipe.
-    // MutableBuffer?
     size_t read(span<byte> data);
     
     // Check if the pipe is open.
@@ -1259,12 +1252,9 @@ namespace std {
 
   class pipe_write_end {
   public:
-    using native_handle_type = implementation-defined;
 
     // Default construct the pipe_end. Will not be opened.
     pipe_write_end();
-
-    pipe_write_end(native_handle_type handle);
 
     pipe_write_end(const pipe_write_end& p);
     pipe_write_end(pipe_write_end&& lhs);
@@ -1275,12 +1265,7 @@ namespace std {
     // Destructor closes the handles.
     ~pipe_write_end();
 
-    native_handle_type native_handle() const;
-
-    void assign(native_handle_type h);
-
     // Write data to the pipe.
-    // ConstBuffer?
     size_t write(span<const byte> data);
     
     // Check if the pipe is open.
@@ -1316,10 +1301,8 @@ namespace std {
     const pipe_read_end& read_end() const &;
 
     // Write data to the pipe
-    // ConstBuffer?
     size_t write(span<const byte> data);
     // Read data from the pipe
-    // MutableBuffer?
     size_t read(span<byte> data);
 
     // Check if the pipe is open
@@ -1576,10 +1559,8 @@ std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be r
 namespace std {
   class async_pipe_read_end {
   public:
-  using native_handle_type = implementation-defined;
 
     async_pipe_read_end(net::Executor& ios);
-    async_pipe_read_end(net::Executor& ios, native_handle_type native_handle);
 
     async_pipe_read_end(const async_pipe_read_end& lhs);
     async_pipe_read_end(async_pipe_read_end&& lhs);
@@ -1600,7 +1581,7 @@ namespace std {
     // Destructor closes the pipe handles
     ~async_pipe_read_end();
 
-    // Explicit conversion operator to basic_pipe
+    // Explicit conversion operator to basic_pipe_read_end
     template<class CharT, class Traits = char_traits<CharT>>
     explicit operator basic_pipe_read_end<CharT, Traits>() const;
     
@@ -1622,8 +1603,6 @@ namespace std {
     template<class MutableBufferSequence>
     size_t read_some(const MutableBufferSequence& buffers);
 
-    native_handle_type native_handle() const;
-
     // Start an asynchronous read
     template<class MutableBufferSequence,
              class ReadHandler>
@@ -1634,10 +1613,8 @@ namespace std {
 
   class async_pipe_write_end {
   public:
-    using native_handle_type = implementation-defined;
 
     async_pipe_write_end(net::Executor& ios);
-    async_pipe_write_end(net::Executor& ios, native_handle_type native_handle);
 
     async_pipe_write_end(const async_pipe_write_end& lhs);
     async_pipe_write_end(async_pipe_write_end&& lhs);
@@ -1658,7 +1635,7 @@ namespace std {
     // Destructor closes the pipe handles
     ~async_pipe_write_end();
 
-    // Explicit conversion operator to basic_pipe
+    // Explicit conversion operator to basic_pipe_write_end
     template<class CharT, class Traits = char_traits<CharT>>
     explicit operator basic_pipe_write_end<CharT, Traits>() const;
     
@@ -1680,9 +1657,6 @@ namespace std {
     template<class ConstBufferSequence>
     size_t write_some(const ConstBufferSequence& buffers);
     
-    // Get the native handle of the source
-    native_handle_type native_handle() const;
-
     // Start an asynchronous write
     template<class ConstBufferSequence,
              class WriteHandler>
@@ -1695,7 +1669,6 @@ namespace std {
   // Can be used directly with net::async_read/write
   class async_pipe {
   public:
-    using native_handle_type = implementation-defined;
 
     // Construct a new async_pipe
     // Automatically opens the pipe
@@ -1758,9 +1731,6 @@ namespace std {
     // See the Networking TS for more details.
     template<class ConstBufferSequence>
     size_t write_some(const ConstBufferSequence& buffers);
-
-    native_handle native_source() const;
-    native_handle native_sink() const;
 
     // Start an asynchronous read
     template<class MutableBufferSequence,
