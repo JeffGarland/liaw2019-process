@@ -8,19 +8,21 @@
 #+LATEX_HEADER:\usepackage[margin=0.8in]{geometry}
 #+LATEX_HEADER:\usepackage{parskip}
 
-
 #+Title: P1750R1 A Proposal to Add Process Management to the C++ Standard Library
 #+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
 ** R1
-+   Added section of review questions and dicussion to record committee discussions
++   Added section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
++   LEWGI feedback: removed ~environment~ class
 +   LEWGI feedback: can ~native_exit_code~ and ~exit_code~ be combined?
-+   LEWGI feedback: remove ~process::operator~ bool
-+   LEWGI feedback: dropped ~process_group~
-+   LEWGI feedback: remove ~native_handles~ from pipes
++   LEWGI feedback: removed ~process::operator~ bool
++   LEWGI feedback: removed ~process_group~ class
++   LEWGI feedback: removed ~native_handles~ from pipes
 +   SG1 feedback: added a section on other c++ libraries with process management 
++   SG1 feedback: added section discussing the ~process~ destructor behavior
++   SG1 feedback: added section discussing issues around forward progress 
 +   Make ~pipe~ a concrete, byte-based type, instead of a template over a character type. Removed ~basic_pipe~.
 +   SG16 feedback: Remove ~char_traits~ and type aliases based on it from ~pipe~
 +   Make ~pipe::read~ and ~pipe::write~ take a ~span~ instead of a pointer and a size
