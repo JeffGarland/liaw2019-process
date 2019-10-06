@@ -231,6 +231,8 @@ p.on('close', (code) => {
 
 This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for ~exit_code~ is so you can write portable cross-platform code. The reason for ~native_exit_code~ is so you can write platform specific code.
 
+** Are ~pids~ fundamental for version 1?
+The view of the authors is that pids are fundamental in the same way that ~tread::id~ is fundamental.  Aside from being useful for applications in logging they are also needed for interacting with the native apis using the ~native_handle~. 
 ** Investigate a non-exception api for error handling
 
 This question was raised in LEWGI in Cologne.  It's clear that the library can provide an api that uses error codes instead of exceptions.  This would look something like the following:
