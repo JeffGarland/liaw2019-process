@@ -5,8 +5,9 @@
 #+LATEX_CLASS: article
 #+LATEX_CLASS_OPTIONS: [a4paper,10pt,titlepage,oneside,openany,final]
 #+LATEX_HEADER:\setcounter{tocdepth}{2}
-#+LATEX_HEADER:\usepackage[margin=0.8in]{geometry} 
+#+LATEX_HEADER:\usepackage[margin=0.8in]{geometry}
 #+LATEX_HEADER:\usepackage{parskip}
+
 
 #+Title: P1750R1 A Proposal to Add Process Management to the C++ Standard Library
 #+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
@@ -20,8 +21,8 @@
 +   LEWGI feedback: dropped ~process_group~
 +   LEWGI feedback: remove ~native_handles~ from pipes
 +   SG1 feedback: added a section on other c++ libraries with process management 
-+   Make `pipe` a concrete, byte-based type, instead of a template over a character type. Removed ~basic_pipe~.
-+   Remove ~char_traits~ and type aliases based on it from ~pipe~
++   Make ~pipe~ a concrete, byte-based type, instead of a template over a character type. Removed ~basic_pipe~.
++   SG16 feedback: Remove ~char_traits~ and type aliases based on it from ~pipe~
 +   Make ~pipe::read~ and ~pipe::write~ take a ~span~ instead of a pointer and a size
 +   ~snake_case~ concepts, ~process_launcher~ -> ~default_process_launcher~ to avoid collisions
 +   Add exposition-only ~process-argument-list~ concept
@@ -121,7 +122,7 @@ In addition it uses the system shell to interpret the command, which is a huge s
 *** ACE::Process
 The Adaptive Communication Environment (ACE) library is an open source library that implements many wrappers around operating system primatives as part of concurrency and communications environment. The library has been ported to a myriad of platforms/operating systems.  It has been used in commercial applications since the late 1990's and is the core for TAO Common Object Request Broker (CORBA) implementation and the Data Distribution Service (DDS) openDDS implementation.
 
-The primary type provided by the library for process management is [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html][ACE_Process]].  This class provides the mechanisms to create and manage a child process. The [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06764.html][ACE_Process_Options]] class facilities the command line and environment setup.  In addition, the [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06776.html][ACE_Process_Manager]] for managing a group of processes.  
+The primary type provided by the library for process management is [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html][~ACE_Process~]].  This class provides the mechanisms to create and manage a child process. The [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06764.html][~ACE_Process_Options~]] class facilities the command line and environment setup.  In addition, the [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06776.html][~ACE_Process_Manager~]] for managing a group of processes.  
 
 *** QT::Process
 The QT libraries provide a widely used, widely ported, open source GUI framework for C++.
@@ -225,7 +226,7 @@ p.on('close', (code) => {
 
 #+END_SRC
 
-* Review Questions and Discussion
+* Committee Questions and Discussion
 ** Investigate combining ~exit_code~ and ~native_exit_code~
 
 This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for ~exit_code~ is so you can write portable cross-platform code. The reason for ~native_exit_code~ is so you can write platform specific code.
@@ -278,6 +279,19 @@ process_make_ret  make_process(...) {
 #+END_SRC
 
 
+** Can ~std::process and std::thread be used in generic code?
+Discussed in some length in SG1 in Cologne with the general conclusion that this proposal does not provide that feature.  While there was weak support for the idea the domains are different enough that it was deemed to be at least difficult.  Advice was to not pursue this issue further.
+** Forward progress and core language impact
+This was discussed at length by SG1 in Cologne. The question that started the discussion:
+- Can we piggyback on the thread's forward progress stuff for process as well? 
+- Can we assume all threads on the system behave like C++ threads?
+
+Some key points included:
+- impossible to describe the external process, not necessarily c++
+- cannot assume forward progress 
+- since it's not really possible for us to describe avoid trying
+
+So at this time the proposal will say nothing.
 
 * Design Discussion & Examples
 ** Concept ~process_launcher~
@@ -1838,10 +1852,11 @@ std::process proc("foo", std::process_io({}, ip.open(), {}));
 #+END_SRC
 
 * Open Questions
-** Core language impact
-The group is aware that there maybe core changes required for this proposal to correctly the define the needed terminology and behavior.  None of us are expert in this and would appreciate help in this area.  Some questions the group asked include:
-- Can we piggyback on the thread's forward progress stuff for process as well? 
-- Can we assume all threads on the system behave like C++ threads?
+** Splitting pipes out 
+In Cologne both LEWGI and SG1 discussed if pipes should be part of a different stand alone proposal. This does not appear to be such an easy task from the authors view since pipes are quite fundamental to the proposal.  Also pipes got changed as part of the SG16 review.  As a result, they remain in this paper for at least one more round of discussion.
+
+** Elimination of ~async_pipe~
+There was a suggestion of a technique to eliminate the ~async_pipe~ while maintaining the functions through streams.  The authors need to followup on this suggested design change.
 
 * Acknowledgements
 
@@ -1852,6 +1867,7 @@ None of this would have been possible without the work and guidance of Klemens M
 * References
 + Github repository for this proposal https://github.com/JeffGarland/liaw2019-process
 + Additional user examples not included in the proposal https://github.com/JeffGarland/liaw2019-process/tree/master/example
++ An online html version of this proposal is at https://github.com/JeffGarland/liaw2019-process/blob/master/process_proposal.org
 + Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
 + boost.process documentation https://www.boost.org/libs/process 
 + Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
