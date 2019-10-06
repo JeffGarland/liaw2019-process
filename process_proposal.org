@@ -8,13 +8,14 @@
 #+LATEX_HEADER:\usepackage[margin=0.8in]{geometry} 
 #+LATEX_HEADER:\usepackage{parskip}
 
-#+Title: D1750R1 A Proposal to Add Process Management to the C++ Standard Library
+#+Title: P1750R1 A Proposal to Add Process Management to the C++ Standard Library
 #+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
 ** R1
- 
+
++   SG1 feedback: added a section on other c++ libraries with process management 
 +   Make `pipe` a concrete, byte-based type, instead of a template over a character type
 +   Remove `char_traits` and type aliases based on it from `pipe`
 +   Make `pipe::read` and `pipe::write` take a `span` instead of a pointer and a size
@@ -112,6 +113,29 @@ if (result == 0) {
 This minimal facility lacks many aspects of process control needed for even basic applications, including access to the standard streams (stdin, stdout, stderr) of the child.
 
 In addition it uses the system shell to interpret the command, which is a huge security hazard because of shell injection.
+
+** Other C++ Libraries
+*** ACE::Process
+The Adaptive Communication Environment (ACE) library is an open source library that implements many wrappers around operating system primatives as part of concurrency and communications environment. The library has been ported to a myriad of platforms/operating systems.  It has been used in commercial applications since the late 1990's and is the core for TAO Common Object Request Broker (CORBA) implementation and the Data Distribution Service (DDS) openDDS implementation.
+
+The primary type provided by the library for process management is [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html][ACE_Process]].  This class provides the mechanisms to create and manage a child process. The [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06764.html][ACE_Process_Options]] class facilities the command line and environment setup.  In addition, the [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06776.html][ACE_Process_Manager]] for managing a group of processes.  
+
+*** QT::Process
+The QT libraries provide a widely used, widely ported, open source GUI framework for C++.
+
+As part of the library, QT provides the core class [[https://doc.qt.io/qt-5/qprocess.html][QProcess]] with the facilities for process spawning and management. 
+
+*** GNOME glib::spawn
+
+The GNOME open source libraries (linux only) provide a [[https://developer.gnome.org/glibmm/stable/group__Spawn.html][set of functions to spawn]] and manage child processes in C++. Beyond basic functions, the functions provide both synchronous and asynchronous execution as well as pipe integration.
+
+*** cpp-subprocess
+
+The [[https://github.com/arun11299/cpp-subprocess][cpp-subprocess]] library uses C++-11 to provide a python-like interface to process management for a limited set of unix-like platforms.  The library supports pipe integration and environment setup.
+
+*** Redirected Process (reproc)
+
+The [[https://github.com/DaanDeMeyer/reproc][reproc]] library provides a cross-platform (windows and Posix) process management facility including stream integration.  The library supports stream and environment setup facilities.
 
 ** Java
 Java provides a ProcessBuilder and stream piping facilities similar to what is proposed here. 
@@ -1951,4 +1975,5 @@ None of this would have been possible without the work and guidance of Klemens M
 + Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
 + cppcast with Klemens on boost.process https://channel9.msdn.com/Shows/CppCast/Episode-72-BoostProcess-with-Klemens-Morgenstern
 + Pacific C++ Klemens on boost.process design https://www.youtube.com/watch?v=uZ4IG1OfeR0
++ ACE Process library documentation http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html
 
