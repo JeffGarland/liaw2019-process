@@ -98,7 +98,9 @@ If there are multiple threads reading or writing from the same pipe at the same 
 
 ** Environment and Command Line Arguments
 
-Creation of a child process sometimes involves modifying the environment for the child process. This proposal references a current proposal for referencing a process environment. However, the proposal P1275 would need to be enhanced to support multiple instances of environments for access and modification of child process environment.  This proposal currently contains a synopsis of similar functionality.
+Creation of a child process sometimes involves modifying the environment for the child process. This proposal references a current proposal for [[http://wg21.link/p1725][P1275]] referencing a process environment. However, P1275 will need to be enhanced to support multiple instances of environments for access and modification of child process environment.
+
+At this time the examples show in this proposal will require an enhanced P1275 to be functional.
 
 * Survey of facilities in other standard libraries
 ** C/C++ system function
@@ -556,84 +558,6 @@ std::process proc("./foo", {}, std::process_io(
 
 #+END_SRC
 
-** Class ~environment~
-
-*** ~operator[]~
-
-Unlike Muerte's proposal (P1275), this proposal does not contain an ~operator[]~. The reason is that environment variables are not uniform on their handling of case-sensitivity. For example ~"PATH"~ might be ~"Path"~ between different versions of Windows. However, both maybe defined on Windows. This can cause a problem:
-
-#+BEGIN_SRC c++
-
-std::environment env = std::this_process::environment::native_environment();
-
-// Let's say it's "Path", but we expect "PATH"
-env["PATH"].add_value("C:\\python");
-std::process proc (env.find_executable("python"), 
-                   {"./my_script.py"}, 
-                    env); // Error: python not found or ambiguity error.
-
-#+END_SRC
-
-Thus this proposal makes the ambiguity explicit.
-
-#+BEGIN_SRC c++
-
-// Make upper case
-std::string to_upper(const std::string& in); 
-
-auto keys = env.keys(); 
-auto path_key = std::find_if(keys.begin(), 
-                             keys.end(), 
-                             [](auto& str) { return to_upper(str) == "PATH"; });
-
-auto entry = env.get(path_key); 
-
-auto val = entry.as_vector();
-val.push_back("C:\\python");
-env.set(path_key, val);
-
-#+END_SRC
-
-*** Function ~environment::home()~
-
-This should be it's own function, because it is one value on POSIX (~"HOME"~) but two on Windows (~"HOME_DRIVE"~, ~"HOME_DIR"~).
-
-*** Function ~environment::extensions~
-
-This environment variable is only used on systems that use file extensions to determine executables (i.e. Windows).
-
-#+BEGIN_SRC c++
-
-// Assume /home/hello_world.py is the executable and "/home" is in PATH already
-// --> It names hello_world on Linux, hello_world.py on Windows.
-std::environment env = std::this_process::environment::native_environment();
-auto extensions = env.extensions();
-
-std::process proc;
-
-// We can use find_executable on Linux only if the file does not have the syntax.
-// This is in accordance with the shell rules
-if (std::find(extensions.begin(), extensions.end(), ".py")) {
-  proc = std::process(env.find_executable("hello_world"), {});
-}
-else {
-  proc = std::process("/home/hello_world.py", {});
-}
-
-#+END_SRC
-
-*** Function ~environment::find_executable~
-
-This function shall find an executable with the name. If the OS uses file extensions it shall compare those, if not it shall check the executable flag.
-
-#+BEGIN_SRC c++
-
-// Finds a file, but is not executable
-auto pt = std::this_process::environment::find_executable("readme.txt"); 
-assert(pt.empty());
-
-#+END_SRC
-
 * Design Decisions
 ** Namespace std versus std::process
 
@@ -791,7 +715,7 @@ namespace std {
   class process_io;
 
   // Satisfies process_initializer
-  class environment;
+  // class environment;  -- from p1275
   
   // Satisfies process_initializer
   class process_limit_handles;
@@ -937,105 +861,6 @@ namespace std {
 
 #+END_SRC
 
-
-** Class ~environment~
-
-An environment class that can manipulate and query any environment variables. Note that this is not for direct manipulation of the current processes environment, but it satisfies process_initializer
-
-#+BEGIN_SRC c++
-
-namespace std {
-  // Satisfies process_initializer
-  class environment {
-  public:
-    using native_environment_type = implementation-defined;
-    
-    native_environment_type native_environment();
-
-    // Empty environment
-    environment();
-    
-    // Construct from a native type, so the current environment can be cloned
-    environment(native_environment_type native_environment); 
-    
-    class entry;
-    
-    using value_type = entry;
-
-    // Note that Windows uses wchar_t here, the key type should be able to be constructed 
-    // from a char* though. So it needs to be similar to filesystem::path
-    using key_type   = implementation-defined; 
-    using pointer    = implementation-defined;
-    
-    value_type  get(const key_type& id);
-    void        set(const key_type& id, const value_type& value);
-    void      reset(const key_type& id);
-
-    // Get all the keys
-    // Return type satisfies ranges::forward_range with iter_value_t convertible to string
-    implementation-defined keys() const;
-    
-    // Utility functions to query common values
-    
-    // Home folder 
-    filesystem::path home() const;
-    // Temporary folder as defined in the env
-    filesystem::path temp() const;
-    
-    // Shell command, see ComSpec for Windows
-    filesystem::path shell() const;
-    
-    // The path variable, parsed.
-    vector<filesystem::path> path() const;
-
-    template<output_iterator OutputIt>
-    OutputIt path(OutputIt it) const;
-    
-    // The path extensions, that mark a file as executable (empty on POSIX)
-    vector<filesystem::path> extensions() const;
-
-    template<ranges::output_iterator It>
-    OutputIt extensions(It it) const;
-
-    // Find an executable file with this name.
-    filesystem::path find_executable(const string& name);
-  };
-
-  class environment::entry {
-  public:
-    using value_type = implementation-defined;
-
-    entry();
-
-    entry(string_view);
-    entry(const string&);
-    entry(const wstring&);
-    entry(const vector<value_type>&);
-    template<ranges::input_range Rng>
-      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
-    entry(const Rng& r);
-
-    entry& operator=(string_view);
-    entry& operator=(const string&);
-    entry& operator=(const wstring&);
-    entry& operator=(const vector<value_type>&);
-    template<ranges::input_range Rng>
-      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
-    entry& operator=(const Rng& r);
-
-    string as_string() const;
-    wstring as_wstring() const;
-    value_type as_native_string() const;
-
-    // Split according to the OS specifics
-    vector<value_type> as_vector() const;
-
-    template<ranges::output_iterator It>
-    It as_range(It it) const;
-  };
-}
-
-#+END_SRC
 
 ** Class ~process_limit_handles~
 
