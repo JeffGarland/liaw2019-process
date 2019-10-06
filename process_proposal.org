@@ -15,6 +15,7 @@
 * Revision History
 ** R1
 
++   LEWGI feedback: dropped process_group
 +   SG1 feedback: added a section on other c++ libraries with process management 
 +   Make `pipe` a concrete, byte-based type, instead of a template over a character type
 +   Remove `char_traits` and type aliases based on it from `pipe`
@@ -41,7 +42,6 @@ We propose a library to facilitate the following functionality:
 +    wait for processes to exit 
 +    terminate processes
 +    capture the return result of a child process
-+    manage groups of processes
 +    optionally associate the child-process to the parent-child to children die with their parents, but not vice-versa.
 
 The following illustrates an example usage of the proposed library. 
@@ -380,51 +380,6 @@ assert(exit_code == proc.exit_code());
 
 #+END_SRC
 
-** Class ~process_group~
-
-The process group can be used for managing several processes at once. Because of the underlying implementation on the OS, there is no guarantee that the exit-code for a process can be obtained. Because of this the ~wait_one~ and related functions do not yield the ~exit_code~ or pid. To make workaround easy, the launch function returns the pid, so a user can write his own code.
-
-*** Example: Attaching a debugger to a process and grouping them.
-
-#+BEGIN_SRC c++
-
-std::process_group group;
-
-auto pid_target = group.emplace("./my_proc", {});
-auto pid_gdb = group.emplace("/usr/bin/gdb", {-p, std::to_string(pid_target)});
-// Do something
-
-// Kill gdb and use the process individually:
-
-group.detach(pid_gdb).terminate();
-std::process target = group.detach(pid_target); 
-
-#+END_SRC
-
-*** Example: Having a worker, e.g. for a build system
-
-#+BEGIN_SRC c++
-
-void run_all(
-  const std::queue<std::pair<std::filesystem::path, std::vector<std::string>>>& jobs,
-  int parallel = 4) {
-  std::process_group group;
-  for (auto idx = 0u; (idx < parallel) && !jobs.empty(); idx++) {
-    const auto [exe, args] = jobs.front();
-    group.emplace(exe, args);
-    jobs.pop();
-  }
-
-  while (!jobs.empty()) {
-    group.wait_one();
-    const auto [exe, args] = jobs.front();
-    group.emplace(exe, args);
-    jobs.pop();
-  }
-}
-
-#+END_SRC
-
 ** Class ~process_io~
 
 ~process_io~ takes three standard handles, because of requirements on some operating systems. Either all three are set or all are defaults.
@@ -758,10 +713,7 @@ namespace std {
   // Can have a filesystem::path attached to it (failing before launch), 
   // or pid_type (failing after)
   class process_error;
-  
-  // Provides a portable, unique wrapper for a process group
-  class process_group;
-  
+    
   // Provides initializers for the standard io. 
   class process_io;
 
@@ -882,101 +834,6 @@ public:
 
   const char* what() const noexcept override;
 };
-
-#+END_SRC
-
-** Class ~process_group~
-
-#+BEGIN_SRC c++
-
-namespace std {
-  class process_group {
-  public:
-    // Provides access to underlying operating system facilities
-    using native_handle_type = implementation-defined; 
-
-    process_group() = default;
-
-    process_group(process_group&& lhs);
-    process_group& operator=(process_group&& lhs);
-    
-    // The destructor terminates all processes in the group
-    ~process_group();
-
-    native_handle_type native_handle() const;
-
-    // Check if at least one process of the group is running
-    bool running() const;
-
-    // Check if this handle holds a process group.
-    // NOTE: That does not mean, that the process is still running. 
-    // It only means, that the handle does or did exist.
-    bool valid() const;
-    explicit operator bool() const; // Equivalent to this->valid()
-
-    // Process management functions
-
-    // Emplace a process into the group, i.e. launch it attached to the group
-    template<process-argument-list Args, process_initializer... Inits>
-    pid_type emplace(const filesystem::path& exe, Args&& args, Inits&&...inits);
-
-    // Emplace a process into the group, i.e. launch it attached to the group with
-    // a custom process launcher
-    template<process-argument-list Args, process_initializer... Inits,
-             process_launcher Launcher>
-      requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Args>>, string>
-    pid_type emplace(const filesystem::path& exe,
-                     const Args& args, Inits&&...inits,
-                     Launcher&& launcher);
-
-    // Attach an existing process to the group. The process object will be empty afterwards
-    pid_type attach(process&& proc);
-
-    // Take a process out of the group
-    [[nodiscard]] process detach(pid_type);
-
-    // Detach a process group -- let it run after this handle destructs
-    void detach();
-
-    // Terminate the child processes (child processes will unconditionally and 
-    // immediately exit).  Implemented with SIGKILL on POSIX and TerminateProcess
-    // on Windows
-    void terminate();
-
-    // Block until all processes exit
-    void wait();
-
-    // Block until one process exit
-    // NOTE: Windows does not yield information on which process exited.
-    void wait_one();
-
-    // Block for all processes to exit for a period of time.
-    template<class Rep, class Period>
-    bool wait_for(const chrono::duration<Rep, Period>& rel_time);
-
-    // Block for one process to exit for a period of time.
-    template<class Rep, class Period>
-    bool wait_for_one(const chrono::duration<Rep, Period>& rel_time);
-
-    // Wait for all processes to exit until a point in time.
-    template<class Clock, class Duration>
-    bool wait_until(const chrono::time_point<Clock, Duration>& timeout_time);
-
-    // Wait for one process to exit until a point in time.
-    template<class Clock, class Duration>
-    bool wait_until_one(const chrono::time_point<Clock, Duration>& timeout_time);
-    
-    // The following is dependent on the networking TS. CompletionToken has 
-    //the signature (error_code) and waits for all processes to exit
-    template<class CompletionToken>
-    auto async_wait(net::Executor& ctx, CompletionToken&& token);
-
-    // The following is dependent on the networking TS. CompletionToken has 
-    // the signature (error_code) and waits for one process
-    template<class CompletionToken>
-    auto async_wait_one(net::Executor& ctx, CompletionToken&& token);
-  };
-}
 
 #+END_SRC
 
