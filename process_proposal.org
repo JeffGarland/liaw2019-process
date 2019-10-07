@@ -14,12 +14,13 @@
 
 * Revision History
 ** R1
-+   Added section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
++   Added a section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
 +   LEWGI feedback: removed ~environment~ class
 +   LEWGI feedback: can ~native_exit_code~ and ~exit_code~ be combined?
 +   LEWGI feedback: removed ~process::operator~ bool
 +   LEWGI feedback: removed ~process_group~ class
 +   LEWGI feedback: removed ~native_handles~ from pipes
++   LEWGI feedback: are pids fundamental?
 +   SG1 feedback: added a section on other c++ libraries with process management 
 +   SG1 feedback: added section discussing the ~process~ destructor behavior
 +   SG1 feedback: added section discussing issues around forward progress 
@@ -238,7 +239,7 @@ The two types are not obviously combinable and serve different purposes.
 The reason for ~exit_code~ is so one can write portable cross-platform code.
 The reason for ~native_exit_code~ is so one can write platform specific code.
 
-** Are ~pid~s fundamental for version 1?
+** Are process ids (pids) fundamental for version 1?
 
 The view of the authors is, that pids are fundamental in the same way that ~std::thread::id~ is fundamental.
 Aside from being useful for applications in logging, they are also needed for interacting with the native APIs using the ~native_handle~.
@@ -317,11 +318,12 @@ Advice was to not pursue this issue further.
 This was discussed at length by SG1 in Cologne. The question that started the discussion was:
 - Can we piggyback on ~std::thread~'s forward progress stuff for ~process~ as well? 
 - Can we assume all threads on the system behave like C++ threads?
+- What can we say about the executing process?
 
 Some key points included:
-- It is impossible to describe the external process, not necessarily C++
-  -> We cannot assume forward progress, since it's not really possible for us to describe
-  -> We should avoid trying to describe forward progress for ~process~
+- It is impossible, in the scope of the standard, to describe the external process which is not necessarily C++
+- We cannot assume forward progress, since it's not really possible for us to describe
+- We should avoid trying to describe forward progress for ~process~
 
 So, at this time, the proposal will say nothing.
 
