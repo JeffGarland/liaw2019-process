@@ -1521,11 +1521,13 @@ namespace std {
     // Check if the pipe end is open
     bool is_open() const;
 
+
     // Read some data from the handle.
     // See the Networking TS for more details.
     template<class MutableBufferSequence>
     size_t read_some(const MutableBufferSequence& buffers);
 
+    // Note: MutableBufferSequence is span<span<byte>>
     // Start an asynchronous read
     template<class MutableBufferSequence,
              class ReadHandler>
