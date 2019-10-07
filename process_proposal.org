@@ -679,7 +679,7 @@ The following represents a first draft of an annotated technical specification w
 namespace std {
   // exposition-only
   // Command line argument list
-  template <ranges::input_range R>
+  template<ranges::input_range R>
   concept process-argument-list =
     requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, string> ||
     requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, wstring> ||
@@ -815,8 +815,8 @@ namespace std {
     
     // The following is dependent on the networking TS. CompletionToken has the signature 
     // (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
-    template<class CompletionToken>
-    auto async_wait(net::Executor& ctx, CompletionToken&& token);
+    template<class Executor, class CompletionToken>
+    auto async_wait(Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -1469,8 +1469,8 @@ std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be r
 namespace std {
   class async_pipe_read_end {
   public:
-
-    async_pipe_read_end(net::Executor& ios);
+    template<class Executor>
+    async_pipe_read_end(Executor& ios);
 
     async_pipe_read_end(const async_pipe_read_end& lhs);
     async_pipe_read_end(async_pipe_read_end&& lhs);
@@ -1479,26 +1479,22 @@ namespace std {
     async_pipe_read_end& operator=(async_pipe_read_end&& lhs);
 
     // Construct form pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_read_end(net::Executor& ios, 
-                                 const basic_pipe_read_end<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe_read_end(Executor& ios, 
+                                 const pipe_read_end& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    inline async_pipe_read_end& operator=(const basic_pipe_read_end<CharT, Traits>& p);
+    inline async_pipe_read_end& operator=(const pipe_read_end& p);
 
     // Destructor closes the pipe handles
     ~async_pipe_read_end();
 
-    // Explicit conversion operator to basic_pipe_read_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_read_end<CharT, Traits>() const;
+    // Explicit conversion operator to pipe_read_end
+    explicit operator pipe_read_end() const;
     
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open(const filesystem::path& path);
+    pipe_write_end<CharT, Traits> open();
+    pipe_write_end<CharT, Traits> open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1523,8 +1519,8 @@ namespace std {
 
   class async_pipe_write_end {
   public:
-
-    async_pipe_write_end(net::Executor& ios);
+    template<class Executor>
+    async_pipe_write_end(Executor& ios);
 
     async_pipe_write_end(const async_pipe_write_end& lhs);
     async_pipe_write_end(async_pipe_write_end&& lhs);
@@ -1533,27 +1529,23 @@ namespace std {
     async_pipe_write_end& operator=(async_pipe_write_end&& lhs);
 
     // Construct from pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_write_end(net::Executor& ios, 
-                                  const basic_pipe_write_end<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe_write_end(Executor& ios, 
+                                  const pipe_write_end& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe_write_end& operator=(const basic_pipe_write_end<CharT, Traits>& p);
+    async_pipe_write_end& operator=(const pipe_write_end<& p);
 
     // Destructor closes the pipe handles
     ~async_pipe_write_end();
 
-    // Explicit conversion operator to basic_pipe_write_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_write_end<CharT, Traits>() const;
+    // Explicit conversion operator to pipe_write_end
+    explicit operator pipe_write_end() const;
     
     // Open the pipe
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open(const filesystem::path& path);
+    pipe_read_end open();
+    pipe_read_end open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1584,10 +1576,12 @@ namespace std {
     // Automatically opens the pipe
     // Initializes source and sink with the same net::Executor
     // NOTE: Windows creates a named pipe here, where the name is automatically generated.
-    async_pipe(net::Executor& ios);
+    template<class Executor>
+    async_pipe(Executor& ios);
 
     // NOTE: Windows restricts possible names
-    async_pipe(net::Executor& ios, const filesystem::path& name);
+    template<class Executor>
+    async_pipe(Executor& ios, const filesystem::path& name);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
@@ -1600,13 +1594,12 @@ namespace std {
     // Construct from a pipe
     // @note Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe(net::Executor& ios, const basic_pipe<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe(Executor& ios, const pipe& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe& operator=(const basic_pipe<CharT, Traits>& p);
+    async_pipe& operator=(const pipe& p);
 
     // Returns a copied pipe read end
     const async_pipe_read_end&  read_end() const &;
@@ -1619,9 +1612,8 @@ namespace std {
     // Destructor, closes the pipe handles
     ~async_pipe();
 
-    // Explicit conversion operator to basic_pipe
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe<CharT, Traits>() const;
+    // Explicit conversion operator to pipe
+    explicit operator pipe() const;
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1661,7 +1653,7 @@ namespace std {
 
 #+END_SRC
 
-~async_pipe~ is structured similar to the ~basic_pipe~ triple. The ~async_pipe_end*::open~ returns a ~basic_pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
+~async_pipe~ is structured similar to the ~pipe~ triple. The ~async_pipe_end*::open~ returns a ~pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
 
 #+BEGIN_SRC c++
 
