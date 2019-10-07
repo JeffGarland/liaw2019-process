@@ -233,82 +233,97 @@ p.on('close', (code) => {
 * Committee Questions and Discussion
 ** Investigate combining ~exit_code~ and ~native_exit_code~
 
-This question was raised in LEWGI in Cologne.  The two types are not obviously combinable and serve different purposes.  The reason for ~exit_code~ is so you can write portable cross-platform code. The reason for ~native_exit_code~ is so you can write platform specific code.
+This question was raised in LEWGI in Cologne.
+The two types are not obviously combinable and serve different purposes.
+The reason for ~exit_code~ is so one can write portable cross-platform code.
+The reason for ~native_exit_code~ is so one can write platform specific code.
 
-** Are ~pids~ fundamental for version 1?
-The view of the authors is that pids are fundamental in the same way that ~tread::id~ is fundamental.  Aside from being useful for applications in logging they are also needed for interacting with the native apis using the ~native_handle~. 
+** Are ~pid~s fundamental for version 1?
+
+The view of the authors is, that pids are fundamental in the same way that ~std::thread::id~ is fundamental.
+Aside from being useful for applications in logging, they are also needed for interacting with the native APIs using the ~native_handle~.
+
 ** Investigate a non-exception api for error handling
 
-This question was raised in LEWGI in Cologne.  It's clear that the library can provide an api that uses error codes instead of exceptions.  This would look something like the following:
+This question was raised in LEWGI in Cologne.
+It's clear, that the library can provide an API that uses error codes instead of exceptions.
+This would look something like the following:
 
 #+BEGIN_SRC c++
 
 namspace std { 
 
 struct process_make_ret {
-   process    a_process;
-   error_code error;
+  process    a_process;
+  error_code error;
 };
 
 class process {
-   friend make_process_ret make_process(...);
+  friend make_process_ret make_process(...);
 public:
-    process(...);
+  process(...);
 };
 
-process_make_ret  make_process(...);
+process_make_ret make_process(...);
 #+END_SRC
 
-The unfortunate result is an api inconsistency with ~std::jthread~ and ~std::thread~, which are similar in usage to ~process~. 
+The unfortunate result is an API inconsistency with ~std::jthread~ and ~std::thread~, which are otherwise similar in usage to ~process~. 
 
-Alternatively, users can write there own wrapper using the current proposal since process supports default construction and a ~valid~ check. 
+Alternatively, users can write their own wrapper using the current proposal, since ~process~ has a default constructor and a ~valid~ member function. 
 
 #+BEGIN_SRC c++
 
-//user code
+// User code
 
 struct process_make_ret {
-   process_make_ret() = default;
-   std::process    a_process;
-   std::error_code error;
+  std::process    process;
+  std::error_code error;
 };
 
-process_make_ret  make_process(...) {
+process_make_ret make_process(...) {
   process_make_ret ret;
   try {
-     ret_.a_process = std::process( ... );
+    ret.process = std::process(...);
   }
-  catch (std::system_error& err) {
-     ret_.a_error = err.code(); 
+  catch (const std::system_error& err) {
+    ret.error = err.code(); 
   }
 }
 #+END_SRC
 
 ** ~process~ destructor should not terminate
 
-SG1 in Cologne discussed the behavior of the ~process~ destructor at length. The originally proposed behavior would terminate the program if ~wait~ had not been called.  The over arching backdrop of SG1 discussion was that ~std::thread~ destructor calling terminate was a poor design choice that was not to be repeated.
+SG1 in Cologne discussed the behavior of the ~process~ destructor at length.
+Originally, it was proposed, that the program would terminate if ~wait~ had not been called, like ~std::thread~ does.
+The over arching backdrop of SG1 discussion was, that ~std::thread~ destructor calling terminate was a poor design choice, that was not to be repeated (see ~std::jthread~).
 
-The authors would like committee guidance and discussion of some possible options.  Including:
+The authors would like committee guidance and discussion of some possible options, including:
 - call ~process::terminate~ on child
-- call ~wait~ by default the destructor
-- add some sort of ~request_stop~ interface to process to mirror ~jthread~ api
+- call ~wait~ by default in the destructor
+- add some sort of ~request_stop~ interface to process to mirror ~std::jthread~ api
 - a constructor option to pick from pre-defined behaviors like ~wait~ or ~detach~
 
-Note that calling ~wait~ in the destructor can also cause poor behavior if the child process never exits. This, however, is similar to the problem with ~jthread::join~ if the user fails to implement coorperative shutdown logic.
+Note that calling ~wait~ in the destructor can also cause poor behavior if the child process never exits.
+This, however, is similar to the problem with ~jthread::join~, if the user fails to implement cooperative shutdown logic.
 
-** Can ~std::process~ and ~std::thread~ be used in generic code?
-Discussed in some length in SG1 in Cologne with the general conclusion that this proposal does not provide that feature.  While there was weak support for the idea the domains are different enough that it was deemed to be at least difficult.  Advice was to not pursue this issue further.
+** Can ~std::process~ and ~std::thread~ interchangeably be used in generic code?
+
+This was discussed in some length in SG1 in Cologne, with the general conclusion, that this proposal should not provide this feature.
+While there was weak support for the idea, the domains are different enough, that it was deemed unnecessary.
+Advice was to not pursue this issue further.
+
 ** Forward progress and core language impact
-This was discussed at length by SG1 in Cologne. The question that started the discussion:
-- Can we piggyback on the thread's forward progress stuff for process as well? 
+
+This was discussed at length by SG1 in Cologne. The question that started the discussion was:
+- Can we piggyback on ~std::thread~'s forward progress stuff for ~process~ as well? 
 - Can we assume all threads on the system behave like C++ threads?
 
 Some key points included:
-- impossible to describe the external process, not necessarily c++
-- cannot assume forward progress 
-- since it's not really possible for us to describe avoid trying
+- It is impossible to describe the external process, not necessarily C++
+  -> We cannot assume forward progress, since it's not really possible for us to describe
+  -> We should avoid trying to describe forward progress for ~process~
 
-So at this time the proposal will say nothing.
+So, at this time, the proposal will say nothing.
 
 * Design Discussion & Examples
 ** Concept ~process_launcher~
@@ -679,7 +694,7 @@ The following represents a first draft of an annotated technical specification w
 namespace std {
   // exposition-only
   // Command line argument list
-  template <ranges::input_range R>
+  template<ranges::input_range R>
   concept process-argument-list =
     requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, string> ||
     requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, wstring> ||
@@ -815,8 +830,8 @@ namespace std {
     
     // The following is dependent on the networking TS. CompletionToken has the signature 
     // (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
-    template<class CompletionToken>
-    auto async_wait(net::Executor& ctx, CompletionToken&& token);
+    template<class Executor, class CompletionToken>
+    auto async_wait(Executor& ctx, CompletionToken&& token);
   };
 }
 
@@ -1469,8 +1484,8 @@ std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be r
 namespace std {
   class async_pipe_read_end {
   public:
-
-    async_pipe_read_end(net::Executor& ios);
+    template<class Executor>
+    async_pipe_read_end(Executor& ios);
 
     async_pipe_read_end(const async_pipe_read_end& lhs);
     async_pipe_read_end(async_pipe_read_end&& lhs);
@@ -1479,26 +1494,22 @@ namespace std {
     async_pipe_read_end& operator=(async_pipe_read_end&& lhs);
 
     // Construct form pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_read_end(net::Executor& ios, 
-                                 const basic_pipe_read_end<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe_read_end(Executor& ios, 
+                                 const pipe_read_end& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    inline async_pipe_read_end& operator=(const basic_pipe_read_end<CharT, Traits>& p);
+    inline async_pipe_read_end& operator=(const pipe_read_end& p);
 
     // Destructor closes the pipe handles
     ~async_pipe_read_end();
 
-    // Explicit conversion operator to basic_pipe_read_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_read_end<CharT, Traits>() const;
+    // Explicit conversion operator to pipe_read_end
+    explicit operator pipe_read_end() const;
     
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_write_end<CharT, Traits> open(const filesystem::path& path);
+    pipe_write_end<CharT, Traits> open();
+    pipe_write_end<CharT, Traits> open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1523,8 +1534,8 @@ namespace std {
 
   class async_pipe_write_end {
   public:
-
-    async_pipe_write_end(net::Executor& ios);
+    template<class Executor>
+    async_pipe_write_end(Executor& ios);
 
     async_pipe_write_end(const async_pipe_write_end& lhs);
     async_pipe_write_end(async_pipe_write_end&& lhs);
@@ -1533,27 +1544,23 @@ namespace std {
     async_pipe_write_end& operator=(async_pipe_write_end&& lhs);
 
     // Construct from pipe_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe_write_end(net::Executor& ios, 
-                                  const basic_pipe_write_end<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe_write_end(Executor& ios, 
+                                  const pipe_write_end& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe_write_end& operator=(const basic_pipe_write_end<CharT, Traits>& p);
+    async_pipe_write_end& operator=(const pipe_write_end<& p);
 
     // Destructor closes the pipe handles
     ~async_pipe_write_end();
 
-    // Explicit conversion operator to basic_pipe_write_end
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe_write_end<CharT, Traits>() const;
+    // Explicit conversion operator to pipe_write_end
+    explicit operator pipe_write_end() const;
     
     // Open the pipe
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open();
-    template<class CharT = char, class Traits = char_traits<CharT>>
-    basic_pipe_read_end<CharT, Traits> open(const filesystem::path& path);
+    pipe_read_end open();
+    pipe_read_end open(const filesystem::path& path);
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1584,10 +1591,12 @@ namespace std {
     // Automatically opens the pipe
     // Initializes source and sink with the same net::Executor
     // NOTE: Windows creates a named pipe here, where the name is automatically generated.
-    async_pipe(net::Executor& ios);
+    template<class Executor>
+    async_pipe(Executor& ios);
 
     // NOTE: Windows restricts possible names
-    async_pipe(net::Executor& ios, const filesystem::path& name);
+    template<class Executor>
+    async_pipe(Executor& ios, const filesystem::path& name);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
@@ -1600,13 +1609,12 @@ namespace std {
     // Construct from a pipe
     // @note Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit async_pipe(net::Executor& ios, const basic_pipe<CharT, Traits>& p);
+    template<class Executor>
+    explicit async_pipe(Executor& ios, const pipe& p);
 
     // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
     // exception is thrown.
-    template<class CharT, class Traits = char_traits<CharT>>
-    async_pipe& operator=(const basic_pipe<CharT, Traits>& p);
+    async_pipe& operator=(const pipe& p);
 
     // Returns a copied pipe read end
     const async_pipe_read_end&  read_end() const &;
@@ -1619,9 +1627,8 @@ namespace std {
     // Destructor, closes the pipe handles
     ~async_pipe();
 
-    // Explicit conversion operator to basic_pipe
-    template<class CharT, class Traits = char_traits<CharT>>
-    explicit operator basic_pipe<CharT, Traits>() const;
+    // Explicit conversion operator to pipe
+    explicit operator pipe() const;
 
     // Cancel the current asynchronous operations
     void cancel();
@@ -1661,7 +1668,7 @@ namespace std {
 
 #+END_SRC
 
-~async_pipe~ is structured similar to the ~basic_pipe~ triple. The ~async_pipe_end*::open~ returns a ~basic_pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
+~async_pipe~ is structured similar to the ~pipe~ triple. The ~async_pipe_end*::open~ returns a ~pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
 
 #+BEGIN_SRC c++
 
