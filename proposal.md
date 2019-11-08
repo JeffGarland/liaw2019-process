@@ -1,60 +1,76 @@
-#+Revision: 1
-#+Audience: LEWGI
-#+Status: 
-#+Group: WG21
-#+LATEX_CLASS: article
-#+LATEX_CLASS_OPTIONS: [a4paper,10pt,titlepage,oneside,openany,final]
-#+LATEX_HEADER:\setcounter{tocdepth}{2}
-#+LATEX_HEADER:\usepackage[margin=0.8in]{geometry}
-#+LATEX_HEADER:\usepackage{parskip}
+---
+title: "A Proposal to Add Process Management to the C++ Standard Library"
+document: D1750R2
+date: today
+audience:
+  - LEWGI
+  - SG1
+  - SG16
+author:
+  - name: Klemens Morgenstern
+  - name: Jeff Garland
+    email: <jeff@crystalclearsoftware.com>
+  - name: Elias Kosunen
+    email: <isocpp@eliaskosunen.com>
+  - name: Fatih Bakir
+toc: true
+---
 
-#+Title: P1750R1 A Proposal to Add Process Management to the C++ Standard Library
-#+Author: Klemens Morgenstern, Jeff Garland, Elias Kosunen, Fatih Bakir
-#+Email: jeff@crystalclearsoftware.com
+# Introduction {#intro}
 
-* Revision History
-** R1
-+   Added a section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
-+   LEWGI feedback: removed ~environment~ class
-+   LEWGI feedback: can ~native_exit_code~ and ~exit_code~ be combined?
-+   LEWGI feedback: removed ~process::operator~ bool
-+   LEWGI feedback: removed ~process_group~ class
-+   LEWGI feedback: removed ~native_handles~ from pipes
-+   LEWGI feedback: are pids fundamental?
-+   SG1 feedback: added a section on other c++ libraries with process management 
-+   SG1 feedback: added section discussing the ~process~ destructor behavior
-+   SG1 feedback: added section discussing issues around forward progress 
-+   Make ~pipe~ a concrete, byte-based type, instead of a template over a character type. Removed ~basic_pipe~.
-+   SG16 feedback: Remove ~char_traits~ and type aliases based on it from ~pipe~
-+   Make ~pipe::read~ and ~pipe::write~ take a ~span~ instead of a pointer and a size
-+   ~snake_case~ concepts, ~process_launcher~ -> ~default_process_launcher~ to avoid collisions
-+   Add exposition-only ~process-argument-list~ concept
-+   Fix Range-based templates, adding ~requires~-clauses
-+   Fix ~tuple_element~ and ~get~ specializations for ~pipe~ and ~pstream~
-+   Numerous editorial fixes
+The creation and management of processes is a widely used and fundamental tool in computing systems.
+Unfortunately, C++ does not have a portable way to create and manage processes.
+Most other language standard libraries support facilities to wrap the complexities in support of application programmers.
+The functionality has been on standard library feature wishlists ([@wishlist]) going back to 2007.
+This proposal is based on Boost.Process: [@boost.process].
+which provides cross-platform implementation experience.
 
-** R0
-Initial release.
+# Revision History {#history}
 
-* Introduction
+## R2
 
-The creation and management of processes is a widely used and fundamental tool in computing systems.  Unfortunately, C++ does not have a portable way to create and manage processes. Most other language standard libraries support facilities to wrap the complexities in support of application programmers. The functionality has been on [[https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview][standard library wish lists]] going back to 2007. This proposal is based on [[https://www.boost.org/libs/process][boost.process]] which provides cross-platform implementation experience.
+TODO
 
-* Motivation and Scope
+## R1
+
+ * Added a section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
+ * LEWGI feedback: removed `environment` class
+ * LEWGI feedback: can `native_exit_code` and `exit_code` be combined?
+ * LEWGI feedback: removed `process::operator bool`
+ * LEWGI feedback: removed `process_group` class
+ * LEWGI feedback: removed `native_handles` from pipes
+ * LEWGI feedback: are pids fundamental?
+ * SG1 feedback: added a section on other C++ libraries with process management 
+ * SG1 feedback: added section discussing the `process` destructor behavior
+ * SG1 feedback: added section discussing issues around forward progress 
+ * Make `pipe` a concrete, byte-based type, instead of a template over a character type. Removed `basic_pipe`.
+ * SG16 feedback: Remove `char_traits` and type aliases based on it from `pipe`
+ * Make `pipe::read` and `pipe::write` take a `span` instead of a pointer and a size
+ * `snake_case` concepts, `process_launcher` -> `default_process_launcher` to avoid collisions
+ * Add an exposition only `process-argument-list` concept
+ * Fix Range-based templates, adding `requires`-clauses
+ * Fix `tuple_element` and `get` specializations for `pipe` and `pstream`
+ * Numerous editorial fixes
+
+## R0
+
+Initial release
+
+# Motivation and Scope {#motivation-scope}
 
 We propose a library to facilitate the following functionality:
-+    create child processes on the current machine
-+    setup streams for communication with child stdout and stderr
-+    communicate with child processes through streams
-+    wait for processes to exit 
-+    terminate processes
-+    capture the return result of a child process
-+    optionally associate the child-process to the parent-child to children die with their parents, but not vice-versa.
+
+ * create child processes on the current machine
+ * setup streams for communication with child stdout and stderr
+ * communicate with child processes through streams
+ * wait for processes to exit 
+ * terminate processes
+ * capture the return result of a child process
+ * optionally associate the child-process to the parent-child to children die with their parents, but not vice-versa.
 
 The following illustrates an example usage of the proposed library. 
 
-#+BEGIN_SRC c++
-
+```cpp
 #include <process>
 
 int main() {
@@ -77,79 +93,94 @@ int main() {
     std::cerr << e.what();
   }
 }
-#+END_SRC
+```
 
-[[https://github.com/JeffGarland/liaw2019-process/tree/master/example][Additional user examples can be seen online]]. 
+Additional user examples can be seen online: [@examples].
 
-* Domain Terminology
-** Processes
-A process is an instance of a program in execution. A process has at least one thread. A process starts execution in the thread that invokes its main function. A child process is the result of another process creating or spawning the child. 
+# Domain Terminology {#glossary}
 
-** Process Groups
-Process groups allow for managing a set of processes at the operating system level. This allows behavior such as process termination to be automatically coordinated by the operating system. For example, child processes in a group can be set to terminate together.
+## Processes
+A process is an instance of a program in execution. A process has at least one thread.
+A process starts execution in the thread that invokes its main function.
+A child process is the result of another process creating or spawning the child. 
 
-** Pipes
+## Pipes
 A pipe is a unidirectional, serial communication line across processes. A pipe has two ends: a write end and a read end.
 
-A pipe is buffered. The size of the buffer is implementation defined. When there's no data in the buffer, the pipe is called empty. When the buffer is full, the pipe is called full.
+A pipe is buffered. The size of the buffer is implementation defined.
+When there's no data in the buffer, the pipe is called empty. When the buffer is full, the pipe is called full.
 
-Reading from an empty pipe is a blocking operation. Writing to a pipe resumes any blocked threads that are waiting to read on that pipe.
+Reading from an empty pipe is a blocking operation.
+Writing to a pipe resumes any blocked threads that are waiting to read on that pipe.
 
 Writing to a full pipe is a blocking operation. Reading from a pipe resumes any blocked threads that are writing to that pipe.
 
 If there are multiple threads reading or writing from the same pipe at the same time the order in which they read the data is unspecified.
 
-** Environment and Command Line Arguments
+## Environment and Command Line Arguments
 
-Creation of a child process sometimes involves modifying the environment for the child process. This proposal references a current proposal for [[http://wg21.link/p1725][P1275]] referencing a process environment. However, P1275 will need to be enhanced to support multiple instances of environments for access and modification of child process environment.
+Creation of a child process sometimes involves modifying the environment for the child process.
+This proposal references a current proposal for [@P1275R0] referencing a process environment.
+However, P1275 will need to be enhanced to support multiple instances of environments for access and modification of child process environment.
 
 At this time the examples show in this proposal will require an enhanced P1275 to be functional.
 
-* Survey of facilities in other standard libraries
-** C/C++ system function
+# Survey of Facilities in Other Standard Libraries {#survey}
 
-C and C++ currently provide a minimal process launching capability via the =system= function. The C++ function takes a =const char*= parameter that represents the command string to execute and an integer return code that signifies the execution return status. 
+## C/C++ `system` Function
 
-#+BEGIN_SRC c++
+C and C++ currently provide a minimal process launching capability via the `system` function.
+The C++ function takes a `const char*` parameter that represents the command string to execute and an integer return code that signifies the execution return status. 
 
+```cpp
 int result = system("echo \"foo\" > bar.txt");
 if (result == 0) {
   // Success
 }
+```
 
-#+END_SRC
-
-This minimal facility lacks many aspects of process control needed for even basic applications, including access to the standard streams (stdin, stdout, stderr) of the child.
+This minimal facility lacks many aspects of process control needed for even basic applications,
+including access to the standard streams (stdin, stdout, stderr) of the child.
 
 In addition it uses the system shell to interpret the command, which is a huge security hazard because of shell injection.
 
-** Other C++ Libraries
-*** ACE::Process
-The Adaptive Communication Environment (ACE) library is an open source library that implements many wrappers around operating system primatives as part of concurrency and communications environment. The library has been ported to a myriad of platforms/operating systems.  It has been used in commercial applications since the late 1990's and is the core for TAO Common Object Request Broker (CORBA) implementation and the Data Distribution Service (DDS) openDDS implementation.
+## Other C++ Libraries
 
-The primary type provided by the library for process management is [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html][~ACE_Process~]].  This class provides the mechanisms to create and manage a child process. The [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06764.html][~ACE_Process_Options~]] class facilities the command line and environment setup.  In addition, the [[http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06776.html][~ACE_Process_Manager~]] for managing a group of processes.  
+### `ACE::Process`
 
-*** QT::Process
-The QT libraries provide a widely used, widely ported, open source GUI framework for C++.
+The Adaptive Communication Environment [@ACE] library is an open source library that implements many wrappers around operating system primatives as part of concurrency and communications environment.
+The library has been ported to a myriad of platforms/operating systems.
+It has been used in commercial applications since the late 1990's and is the core for TAO Common Object Request Broker (CORBA) implementation and the Data Distribution Service (DDS) openDDS implementation.
 
-As part of the library, QT provides the core class [[https://doc.qt.io/qt-5/qprocess.html][QProcess]] with the facilities for process spawning and management. 
+The primary type provided by the library for process management is `ACE_Process`.
+This class provides the mechanisms to create and manage a child process.
+The `ACE_Process_Options` class facilities the command line and environment setup.
+In addition, the `ACE_Process_Manager` for managing a group of processes.  
 
-*** GNOME glib::spawn
+### Qt `QProcess`
 
-The GNOME open source libraries (linux only) provide a [[https://developer.gnome.org/glibmm/stable/group__Spawn.html][set of functions to spawn]] and manage child processes in C++. Beyond basic functions, the functions provide both synchronous and asynchronous execution as well as pipe integration.
+Qt provides the core class `QProcess` [@Qt] with the facilities for process spawning and management. 
 
-*** cpp-subprocess
+### GNOME `glib::spawn`
 
-The [[https://github.com/arun11299/cpp-subprocess][cpp-subprocess]] library uses C++-11 to provide a python-like interface to process management for a limited set of unix-like platforms.  The library supports pipe integration and environment setup.
+The GNOME open source libraries [@GNOME] (linux only) provide a set of functions to spawn and manage child processes in C++.
+Beyond basic functions, the functions provide both synchronous and asynchronous execution as well as pipe integration.
 
-*** Redirected Process (reproc)
+### cpp-subprocess
 
-The [[https://github.com/DaanDeMeyer/reproc][reproc]] library provides a cross-platform (windows and Posix) process management facility including stream integration.  The library supports stream and environment setup facilities.
+The cpp-subprocess ([@cpp-subprocess]) library uses C++11 to provide a Python-like interface to process management for a limited set of Unix-like platforms.
+The library supports pipe integration and environment setup.
 
-** Java
-Java provides a ProcessBuilder and stream piping facilities similar to what is proposed here. 
+### Redirected Process (reproc)
 
-#+BEGIN_SRC java
+The reproc ([@reproc]) library provides a cross-platform (Windows and POSIX) process management facility including stream integration.
+The library supports stream and environment setup facilities.
+
+## Java
+
+Java provides a `ProcessBuilder` class and stream piping facilities similar to what is proposed here. 
+
+```java
 
 // ProcessBuilder takes variadic string arguments
 // or a List<String>
@@ -173,11 +204,11 @@ assert output == "foo";
 
 System.out.println("Exited with " + p.exitValue())
 
-#+END_SRC
+```
 
-** Python
+## Python
 
-#+BEGIN_SRC python
+```python
 
 from subprocess import run
 
@@ -188,12 +219,13 @@ result = run([ '/bin/cat', '-' ],
 assert result.stdout == 'foo'
 print("Exited with", result.returncode)
 
-#+END_SRC
+```
 
-** Rust
+## Rust
+
 As with other languages Rust provides the ability to pipe the results of the process into the parent.
 
-#+BEGIN_SRC rust
+```rust
 
 use std::process::{Command, Stdio};
 
@@ -210,11 +242,11 @@ let output = child.wait_with_output()?;
 assert_eq!(b"foo", output.stdout.as_slice());
 println!("Exited with {}", output.status.code.unwrap());
 
-#+END_SRC
+```
 
-** Node.js
+## Node.js
 
-#+BEGIN_SRC js
+```js
 
 const { spawn } = require('child_process');
 
@@ -229,28 +261,29 @@ p.on('close', (code) => {
   console.log(`Exited with ${code}`);
 });
 
-#+END_SRC
+```
 
-* Committee Questions and Discussion
-** Investigate combining ~exit_code~ and ~native_exit_code~
+# Committee Questions and Discussion {#questions}
+
+## Investigate combining `exit_code` and `native_exit_code`
 
 This question was raised in LEWGI in Cologne.
 The two types are not obviously combinable and serve different purposes.
-The reason for ~exit_code~ is so one can write portable cross-platform code.
-The reason for ~native_exit_code~ is so one can write platform specific code.
+The reason for `exit_code` is so one can write portable cross-platform code.
+The reason for `native_exit_code` is so one can write platform specific code.
 
-** Are process ids (pids) fundamental for version 1?
+## Are process ids (pids) fundamental for version 1?
 
-The view of the authors is, that pids are fundamental in the same way that ~std::thread::id~ is fundamental.
-Aside from being useful for applications in logging, they are also needed for interacting with the native APIs using the ~native_handle~.
+The view of the authors is, that pids are fundamental in the same way that `std::thread::id` is fundamental.
+Aside from being useful for applications in logging, they are also needed for interacting with the native APIs using the `native_handle`.
 
-** Investigate a non-exception api for error handling
+## Investigate a non-exception api for error handling
 
 This question was raised in LEWGI in Cologne.
 It's clear, that the library can provide an API that uses error codes instead of exceptions.
 This would look something like the following:
 
-#+BEGIN_SRC c++
+```cpp
 
 namspace std { 
 
@@ -266,13 +299,13 @@ public:
 };
 
 process_make_ret make_process(...);
-#+END_SRC
+```
 
-The unfortunate result is an API inconsistency with ~std::jthread~ and ~std::thread~, which are otherwise similar in usage to ~process~. 
+The unfortunate result is an API inconsistency with `std::jthread` and `std::thread`, which are otherwise similar in usage to `process`. 
 
-Alternatively, users can write their own wrapper using the current proposal, since ~process~ has a default constructor and a ~valid~ member function. 
+Alternatively, users can write their own wrapper using the current proposal, since `process` has a default constructor and a `valid` member function. 
 
-#+BEGIN_SRC c++
+```cpp
 
 // User code
 
@@ -290,90 +323,93 @@ process_make_ret make_process(...) {
     ret.error = err.code(); 
   }
 }
-#+END_SRC
+```
 
-** ~process~ destructor should not terminate
+## `process` destructor should not terminate
 
-SG1 in Cologne discussed the behavior of the ~process~ destructor at length.
-Originally, it was proposed, that the program would terminate if ~wait~ had not been called, like ~std::thread~ does.
-The over arching backdrop of SG1 discussion was, that ~std::thread~ destructor calling terminate was a poor design choice, that was not to be repeated (see ~std::jthread~).
+SG1 in Cologne discussed the behavior of the `process` destructor at length.
+Originally, it was proposed, that the program would terminate if `wait` had not been called, like `std::thread` does.
+The over arching backdrop of SG1 discussion was, that `std::thread` destructor calling terminate was a poor design choice, that was not to be repeated (see `std::jthread`).
 
 The authors would like committee guidance and discussion of some possible options, including:
-- call ~process::terminate~ on child
-- call ~wait~ by default in the destructor
-- add some sort of ~request_stop~ interface to process to mirror ~std::jthread~ api
-- a constructor option to pick from pre-defined behaviors like ~wait~ or ~detach~
 
-Note that calling ~wait~ in the destructor can also cause poor behavior if the child process never exits.
-This, however, is similar to the problem with ~jthread::join~, if the user fails to implement cooperative shutdown logic.
+ * call `process::terminate` on child
+ * call `wait` by default in the destructor
+ * add some sort of `request_stop` interface to process to mirror `std::jthread` api
+ * a constructor option to pick from pre-defined behaviors like `wait` or `detach`
 
-** Can ~std::process~ and ~std::thread~ interchangeably be used in generic code?
+Note that calling `wait` in the destructor can also cause poor behavior if the child process never exits.
+This, however, is similar to the problem with `jthread::join`, if the user fails to implement cooperative shutdown logic.
+
+## Can `std::process` and `std::thread` interchangeably be used in generic code?
 
 This was discussed in some length in SG1 in Cologne, with the general conclusion, that this proposal should not provide this feature.
 While there was weak support for the idea, the domains are different enough, that it was deemed unnecessary.
 Advice was to not pursue this issue further.
 
-** Forward progress and core language impact
+## Forward progress and core language impact
 
 This was discussed at length by SG1 in Cologne. The question that started the discussion was:
-- Can we piggyback on ~std::thread~'s forward progress stuff for ~process~ as well? 
-- Can we assume all threads on the system behave like C++ threads?
-- What can we say about the executing process?
+
+ * Can we piggyback on `std::thread`'s forward progress stuff for `process` as well? 
+ * Can we assume all threads on the system behave like C++ threads?
+ * What can we say about the executing process?
 
 Some key points included:
-- It is impossible, in the scope of the standard, to describe the external process which is not necessarily C++
-- We cannot assume forward progress, since it's not really possible for us to describe
-- We should avoid trying to describe forward progress for ~process~
+
+ * It is impossible, in the scope of the standard, to describe the external process which is not necessarily C++
+ * We cannot assume forward progress, since it's not really possible for us to describe
+ * We should avoid trying to describe forward progress for `process`
 
 So, at this time, the proposal will say nothing.
 
-* Design Discussion & Examples
-** Concept ~process_launcher~
+# Design Discussion and Examples {#examples}
 
-The process launcher is a class that implements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
-And while POSIX can change a user by utilizing setuid in a ~process_initializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
+## Concept `process_launcher`
+
+The process launcher is a class that implements the actual launch of a process.
+In most cases there are different versions to do this.
+On Linux, for example, `vfork` can be required as an alternative for fork on low-memory devices.
+Also, while POSIX can change a user by utilizing `setuid` in a `process_initializer`,
+Windows requires the invocation of a different function (`CreateProcessAsUserA`).
 
 As an example for Linux:
 
-#+BEGIN_SRC c++
-
+```cpp
 #include <gnu_cxx_process>
 
 __gnu_cxx::vfork_launcher launcher;
 std::process my_proc("/bin/program", {}, launcher);
-
-#+END_SRC
+```
 
 or for Windows:
 
-#+BEGIN_SRC c++
-
+```cpp
 __msvc::as_user_launcher{"1234-is-not-a-safe-user-token"};
 std::process my_proc("C:\\program", {}, launcher);
-
-#+END_SRC
+```
 
 In addition libraries may provide their launchers. The requirement is that there is an actual process with a pid as the result of launching the process.
 
-Furthermore, the fact that the launcher has a well-specified ~launch~ function allows to launch a process like this:
+Furthermore, the fact that the launcher has a well-specified `launch` function allows to launch a process like this:
 
-#+BEGIN_SRC c++
-
+```cpp
 std::default_process_launcher launcher;
 auto proc = launcher.launch("/bin/foo", {});
+```
 
-#+END_SRC
+Both versions make sense in their own way: on the one hand, using the process constructor fits in well with the STL and it's RAII classes, like `thread`.
+On the other hand it actually uses a factory class, which can be used so explicitly.
 
-Both versions make sense in their own way: on the one hand using the process constructor fits well in with the STL and it's RAII classes like thread. On the other hand it actually uses a factory-class, which can be used so explicitly.
+## Concept `process_initializer`
 
-** Concept ~process_initializer~
-
-The process initializer is a class that modifies the behavior of a process. There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher. This is because an initializer might need to modify members of the launcher itself (common on Windows) and thus might break with another launcher.
+The process initializer is a class that modifies the behavior of a process.
+There is no guarantee that a custom initializer is portable, i.e. it will not only be dependent on the operating system but also on the process launcher.
+This is because an initializer might need to modify members of the launcher itself (common on Windows), and thus might break with another launcher.
 
 Note that the concept might look different on other implementation, since additional event hooks might exist.
 
-#+BEGIN_SRC c++
-
+```cpp
 struct switch_user {
   ::uid_t uid;
 
@@ -385,127 +421,122 @@ struct switch_user {
 };
 
 std::process proc("/bin/spyware", {}, switch_user{42});
+```
 
-#+END_SRC
+## Class `process`
+### Constructor 
 
-** Class ~process~
-*** Constructor 
+`process(const std::filesystem::path&, const process-argument-list&, Inits&&... init)`
 
-~process(const std::filesystem::path&, const process-argument-list&, Inits&&... init)~
-
-This is the default launching function, and forwards to ~std::default_process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
+This is the default launching function, and forwards to `std::default_process_launcher`.
+Boost.Process supports a cmd-style execution (similar to `std::system`), which we opted to remove from this proposal.
 This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
 Instead, we require the actually used (absolute) path of the executable.
-Since it is common to just type a command and expect the shell to search for the executable in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
+Since it is common to just type a command and expect the shell to search for the executable in the `PATH` environment variable,
+there is a helper function for that, either in the `std::environment` class or the `std::this_process::environment` namespace.
 
-#+BEGIN_SRC c++
+```cpp
+/ Launches to cmd or /bin/sh
+std::system("git --version");
 
-std::system("git --version"); // Launches to cmd or /bin/sh
-
-std::process("git", {"--version"}); // Throws process_error, exe not found
-std::process(std::this_process::environment::find_executable("git"), {"--version"}); // Finds the exe
+// Throws process_error, exe not found
+std::process("git", {"--version"});
+// Finds the exe
+std::process(std::this_process::environment::find_executable("git"), {"--version"});
 
 // Or if we want to run it through the shell, note that /c is Windows specific
 std::process(std::this_process::environment::shell(), {"/c", "git --version"});
+```
 
-#+END_SRC
+Another solution is for a user to provide their own `process_launcher` as a `shell_launcher`.
 
-Another solution is for a user to provide their own ~process_launcher~ as a ~shell_launcher~.
+### Function `wait`
 
-*** Function ~wait~
+The wait function waits for a process to exit. When replacing `std::system` it can be used like this:
 
-The wait function waits for a process to exit. When replacing ~std::system~ it can be used like this:
-
-#+BEGIN_SRC c++
-
+```cpp
 const auto result_sys = std::system("gcc --version");
 
 std::process proc(std::this_process::environment::find_executable("gcc"), {"--version"});
 proc.wait();
 const auto result_proc = proc.exit_code();
+```
 
-#+END_SRC
+### Function `wait_for`
 
-*** Function ~wait_for~
+In case the child process might hang, `wait_for` might be used.
 
-In case the child process might hang, ~wait_for~ might be used.
-
-#+BEGIN_SRC c++
-
+```cpp
 std::process proc(std::this_process::environment::find_executable("python"), {"--version"});
 
 int res = -1;
-if (proc.wait_for(std::chrono::seconds(1))
+if (proc.wait_for(std::chrono::seconds(1)) {
   res = proc.exit_code();
-else
+} else {
   proc.terminate(); 
+}
+```
 
-#+END_SRC
+### Function `native_handle`
 
-*** Function ~native_handle~
+Since there is a lot functionality that is not portable, the `native_handle` is accessible.
+For example, there is no clear equivalent for `SIGTERM` on Windows.
+If a user still wants to use this, they could still do so:
 
-Since there is a lot functionality that is not portable, the ~native_handle~ is accessible. For example, there is no clear equivalent for ~SIGTERM~ on Windows. If a user still wants to use this, they could still do so:
-
-#+BEGIN_SRC c++
-
+```cpp
 std::process proc("/usr/bin/python", {});
 
 ::kill(proc.native_handle(), SIGTERM);
 proc.wait();
+```
 
-#+END_SRC
+### Function `native_exit_code`
 
-*** Function ~native_exit_code~
+The exit-code may contain more information on a specific system.
+Practically this is the case on POSIX.
+If a user wants to extract additional information they might need to use `native_exit_code`.
 
-The exit-code may contain more information on a specific system. Practically this is the case on POSIX. If a user wants to extract additional information they might need to use ~native_exit_code~.
-
-#+BEGIN_SRC c++
-
+```cpp
 std::process proc(std::this_process::environment::find_executable("gcc"), {});
 proc.wait();
 const auto exit_code = proc.exit_code(); // Equals to 1, since no input files
 
 // Linux specific:
 const bool exited_normally = WIFEXITED(proc.native_exit_code());
+```
 
-#+END_SRC
+### Function `async_wait`
 
-*** Function ~async_wait~
+To allow asynchronous operations, the process library integrates with the networking TS.
 
-To allow asynchronous operations, the process library shall integrate with the networking TS.
-
-#+BEGIN_SRC c++
-
+```
 extern std::net::system_executor exec;
 std::process proc(std::this_environment::find_executable("gcc"), {});
 
 auto fut = proc.async_wait(exec, std::net::use_future_t());
 const bool exit_code = fut.get();
 assert(exit_code == proc.exit_code());
+```
 
-#+END_SRC
+## Class `process_io`
 
-** Class ~process_io~
+`process_io` takes three standard handles, because of requirements on some operating systems.
+Either all three are set or all are defaults.
 
-~process_io~ takes three standard handles, because of requirements on some operating systems. Either all three are set or all are defaults.
+The default, of course, is to forward it to `std`.
 
-The default, of course, is to forward it to ~std*~.
+### Using pipes
 
-*** Using pipes
-
-#+BEGIN_SRC c++
-
+```cpp
 std::pipe pin, pout, perr;
 std::process proc("foo", {}, std::process_io(pin, pout, perr));
 
 pin.write("bar", 4);
-
-#+END_SRC
+```
 
 Forwarding between processes:
 
-#+BEGIN_SRC c++
-
+```cpp
 std::system("./proc1 | ./proc2");
 
 {
@@ -514,93 +545,86 @@ std::system("./proc1 | ./proc2");
   std::process proc1("./proc1", {}, std::process_io({}, fwd, {}));
   std::process proc2("./proc1", {}, std::process_io(fwd, {}, {}));
 }
+```
 
-#+END_SRC
+You can also use any `pstream` type instead.
 
-You can also use any ~pstream~ type instead.
+### Using files
 
-*** Using files
-
-#+BEGIN_SRC c++
-
+```cpp
 std::filesystem::path log_path = std::this_process::environment::home() / "my_log_file";
 std::system("foo > ~/my_log_file");
 // Equivalent:
 std::process proc("foo", std::process_io({}, log_path, {}));
+```
 
-#+END_SRC
+With an extension to `fstream`:
 
-With an extension to fstream:
-
-#+BEGIN_SRC c++
-
+```cpp
 std::ifstream fs{"/my_log_file"};
 std::process proc("./foo", std::process(fs, {}, {});
+```
 
-#+END_SRC
+### `std::this_process::stdio`
 
-*** ~std::this_process::stdio~
+Since `std::cout` can be redirected programmatically and has the same type as `std::cerr` it does not seem like a proper fit, unless the type is changed 
 
-Since ~std::cout~ can be redirected programmatically and has the same type as ~std::cerr~ it does not seem like a proper fit, unless the type is changed 
-
-#+BEGIN_SRC c++
-
+#``cpp
 // Redirect stderr to stdout
 std::process proc ("./foo", std::process_io({}, {}, std::this_process::io().stdout());
+```
 
-#+END_SRC
+### Closing streams
 
-*** Closing streams
+A closed stream means that the child process cannot read or write from the stream.
+That is, an attempt to do so yields an error. This can be done by using `nullptr`.
 
-A closed stream means that the child process cannot read or write from the stream. That is, an attempt to do so yields an error. This can be done by using ~nullptr~.
-
-#+BEGIN_SRC c++
-
+```cpp
 std::process proc("./foo", std::process_io(nullptr, nullptr, nullptr));
+```
 
-#+END_SRC
+### Other objects 
 
-*** Other objects 
+Other objects, that use an underlying stream handle, could also be used.
+This is the case for tcp sockets (i.e. `std::net::basic_stream_socket`).
 
-Other objects, that use an underlying stream handle, could also be used. This is the case for tcp sockets (i.e. ~std::net::basic_stream_socket~).
-
-#+BEGIN_SRC c++
-
+```cpp
 std::net::tcp::socket sock(...) 
 // Connect the socket
 
 std::process proc("./server", std::process_io(socket, socket, "log-file"));
+```
 
-#+END_SRC
-
-*** Null device (not yet specified)
-
-The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL"). It accepts writes, and always returns.
+### Null device (not yet specified)
+#
+The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL").
+It accepts writes, and always returns.
 It might be worth it to consider adding it.
 
-#+BEGIN_SRC c++
-
+```cpp
 std::system("./foo > /dev/null");
 
 // Not (yet) part of this paper
 std::process proc("./foo", {}, std::process_io(
   std::process_io::null(), std::process_io::null(), std::process_io::null()));
+```
 
-#+END_SRC
+# Design Decisions
 
-* Design Decisions
-** Namespace std versus std::process
+## Namespace `std` versus `std::process`
 
-The classes and functions for this proposal could be put into namespace =std=, or a sub-namespace, such as =std::process=. Process is more similar to =std::thread= than =std::filesystem=. Since ~thread~ is in namespace =std= this proposal suggests the same for process.  The proposal also introduces namespace =std::this_process= for accessing attributes of the current process environment.
+The classes and functions for this proposal could be put into namespace `std`, or a sub-namespace, such as `std::process`.
+Process is more similar to `std::thread` than `std::filesystem`.
+Since `thread` is in namespace `std` this proposal suggests the same for process. 
+The proposal also introduces namespace `std::this_process` for accessing attributes of the current process environment.
 
-** Using a builder method to create
+## Using a builder method to create
 
-Have a =run()= method versus immediate launching in the constructor
+Have a `run()` method versus immediate launching in the constructor
 
 This is solved through the extended launcher concept. 
 
-#+BEGIN_SRC c++
-
+```cpp
 // These are the same:
 process(...) : process(default_process_launcher.launch(...)) {}
 default_process_launcher().launch(...) -> process;
@@ -608,168 +632,202 @@ default_process_launcher().launch(...) -> process;
 // These are the same:
 process(..., custom_launcher& cl) : process(cl.launch) {}
 cl.launch(...);
+```
 
-#+END_SRC
+## `wait` or `join`
+The name of the method in `process` was discussed at length.
+The name `join` would be similar to `std::thread` while `wait` is more like various locking classes in the standard.
+Boost.Process supports both.
+The decision was to use `wait`, but the name is open to bikeshedding.
 
-** ~wait~ or ~join~
-The name of the method in ~class process~ was discussed at length.  The name ~join~ would be similar to ~std::thread~ while ~wait~ is more like various locking classes in the standard.  ~boost.process~ supports both.  The decision was to use ~wait~, but the name is open to bike shedding.
+## Native Operating System Handle Support
 
-** Native Operating System Handle Support
+The solution provides access to the operating system, like `std::thread`, for programmers who to go beyond the provided facilities.
 
-The solution provides access to the operating system, like =std::thread=, for programmers who to go beyond the provided facilities.
+## Pipe close and EOF
 
-** Pipe close and EOF
+Compared to the `boost.process` implementation, this proposal adds classes for different `pipe_ends` and uses C++17 aggregate initialization.
+The reason is that the following behavior is not necessarily intuitive:
 
-Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behavior is not necessarily intuitive:
-
-#+BEGIN_SRC c++
-
+```cpp
 boost::process::pipe p;
 
 boost::process::child c("foo", boost::process::std_in < p);
+```
 
-#+END_SRC
+In Boost.Process this closes the write end of `p`, so an `EOF` is read from `p` when `c` exists.
+In most cases this would be expected behavior, but it is far from obvious.
+By using two different types this can be made more obvious, especially since aggregate initialization can be used:
 
-In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behavior, but it is far from obvious. By using two different types this can be made more obvious, especially since aggregate initialization can be used:
-
-#+BEGIN_SRC c++
-
+```cpp
 auto [p_read, p_write] = std::pipe();
 std::process("foo", std::process_io(p_read));
 p_read.close();
 
 p_write.write("data", 5);
+```
 
-#+END_SRC
+Note that overloading allows us to either copy or move the pipe,
+i.e. the given example only moves the handles without duplicating them.
 
-Note that overloading allows us to either copy or move the pipe, i.e. the given example only moves the handles without duplicating them.
+## Security and User Management Implications
 
-** Security and User Management Implications
+`std::system` is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here.
+A shell might easily still be used by utilizing `std::this_process::environment::shell()`.
 
-=std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing =std::this_process::environment::shell()=.
+The standard process library does not touch on user management.
+As with file level visibility and user access the responsibility for user permissions lies outside the standard.
+For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process#
+This would be reflected as `system_error`. 
 
-The standard process library does not touch on user management. As with file level visibility and user access the responsibility for user permissions lies outside the standard. For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process. This would be reflected as ~system_error~. 
+## Extensibility
 
-** Extensibility
+To be extensible this library uses two concepts: `process_launcher` and `process_initializer`.
 
-To be extensible this library uses two concepts: =process_launcher= and =process_initializer=.
+A `process_launcher` is the actual function creating the process.
+It can be used to provide platform dependent behavior such as launching a process a new user (Using `CreateProcessAsUser` on Windows) or to use `vfork` on Linux.
+The vendor can thus just provide a launcher, and the user can then just drop it into their code.
 
-A =process_launcher= is the actual function creating the process. It can be used to provide platform dependent behavior such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
-
-A =process_initializer= allows minor additions, that just manipulate the process. E.g. on Windows to set a =SHOW_WINDOW= flag, or on Linux to change the user with =setuid=.
+A `process_initializer` allows minor additions, that just manipulate the process.
+E.g. on Windows to set a `SHOW_WINDOW` flag, or on Linux to change the user with `setuid`.
 
 Not having these customization points would greatly limit the applicability of this library.
 
-The =process_launcher= has three methods that must be provided by a custom launcher.  These are:
-+ ~on_setup~   - calls the initializer before attempting to launch
-+ ~on_success~ - calls the initializer after successful process launch
-+ ~on_error~ - On error passes an ~std::error_code~ to the initializer, so it can react, e.g. free up resources. The launcher must only throw after every initializer was notified.
+The `process_launcher` has three methods that must be provided by a custom launcher. 
+These are:
 
-** Error Handling
+ * `on_setup`: calls the initializer before attempting to launch
+ * `on_success`: calls the initializer after successful process launch
+ * `on_error`: On error passes an `std::error_code` to the initializer, so it can react, e.g. free up resources.
+               The launcher must only throw after every initializer was notified.
 
-Uses exceptions by throwing a =std::process_error=. ~boost.process~ has an alternative error code based api similar to ~std::filesystem~. Field experience shows little actual usage of this api so it was not included in the proposal. 
+## Error Handling
 
-** Synchronous Versus Asynchronous and Networking TS
-Synchronous process management is prone to potential deadlocks. However used in conjunction with =std::thread= and other facilities synchronous management can be useful. Thus the proposal supports both styles.
+Uses exceptions by throwing a `std::process_error`.
+Boost.Process has an alternative error code based API similar to `std::filesystem`.
+Field experience shows little actual usage of this API so it was not included in the proposal.
 
-~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors. This proposal currently references the Networking TS for this behavior. However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
+## Synchronous Versus Asynchronous and Networking TS
 
-** Integration of =iostream= and pipes
+Synchronous process management is prone to potential deadlocks.
+However used in conjunction with `std::thread` and other facilities synchronous management can be useful.
+Thus, the proposal supports both styles.
 
-Pipes bring their own streams, that can be used within a process (e.g. between threads). Thus the proposal provides header ~pstream~ and the various pipe stream classes as a separate entity. 
+Boost.Process is currently integrated with `boost.asio` to support asynchronous behaviors.
+This proposal currently references the Networking TS for this behavior.
+However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
 
-* Technical Specification
+## Integration of `iostream` and pipes
 
-The following represents a first draft of an annotated technical specification without formal wording. For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
+Pipes bring their own streams, that can be used within a process (e.g. between threads).
+Thus the proposal provides header `pstream` and the various pipe stream classes as a separate entity. 
 
-** Header ~<process>~ Synopsis
+# Technical Specification
 
-#+BEGIN_SRC c++
+The following represents a first draft of an annotated technical specification without formal wording.
+For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
 
+## Header `<process>` synopsis
+
+```cpp
 #include <chrono>
 #include <filesystem>
 #include <ranges>
 #include <string>
 #include <system_error>
 #include <vector>
- 
-namespace std {
-  // exposition-only
-  // Command line argument list
-  template<ranges::input_range R>
-  concept process-argument-list =
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, string> ||
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, wstring> ||
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, u8string>;
 
-  // A launcher is an object that has a launch function that takes a path, 
-  // arguments and a variadic list of process initializers and returns a process object. 
-  template<class T, process-argument-list Args>
-  concept process_launcher = requires(T launcher, const Args& a) {
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Args>>, string>;
-    // Takes an error_code, so initializers can report internal errors
-    { launcher.set_error(error_code(), "message") } -> void;
-    { launcher.launch(filesystem::path(), a) } -> process;
-  };
+namespace std {
+  // Command line argument list
+  // Could also be specified as a set of named requirements
+  // An input_range of basic_strings,
+  // where the character type is either char, wchar_t, char8_t
+  template<class charT>
+  inline constexpr bool @_process-argument-list-char_@ = // exposition only
+    is_same_v<charT, char> ||
+    is_same_v<charT, wchar_t> ||
+    is_same_v<charT, char8_t>;
+  template<ranges::input_range R, class charT, class traits>
+  concept @_process-argument-list_@ = // exposition only
+    requires convertible_to<
+      ranges::iter_value_t<ranges::iterator_t<R>>, basic_string<charT, traits>> &&
+    requires @_process-argument-list_char_@<charT>;
+
+  // A process-laucher is an object that has a launch function taking
+  // a path, arguments and a list of initializers, and returns a process.
+  // Could also be specified as a set of named requirements
+  template<class T, @_process-argument-list_@ Args>
+  concept @_process-launcher_@ = // exposition only
+    requires(T launcher, const Args& args,
+             ranges::iter_value_t<ranges::iterator_t<Args>> errmsg,
+             error_code& err, const filesystem::path& path) {
+      launcher.set_error(err, errmsg);
+      { launcher.launch(path, args) } -> process;
+    };
 
   // The default process-launcher of the implementation
   class default_process_launcher;
-  
-  // An initializer is an object that changes the behavior of a process during launch 
-  // and thus listens to at least one of the hooks of the launcher. 
-  // Note that the following example only uses portable hooks, but non portables 
-  // might suffice as well
-  template<class Init, process_launcher Launcher = default_process_launcher>
-  concept process_initializer =
-       requires(Init initializer, Launcher launcher) 
-       { {initializer.on_setup(launcher)}   -> void; }
-    || requires(Init initializer, Launcher launcher) 
-       { {initializer.on_success(launcher)} -> void; }
-    || requires(Init initializer, Launcher launcher) 
-       { {initializer.on_error(launcher, error_code())} -> void; };
-  }
 
-  // A pid_type is an identifier for a process, that satisfies StrictTotallyOrdered
-  using pid_type = implementation-defined;
+  // A process-initializer is an object that changes
+  // the behavior of a process during launch
+  // and thus listens to at least one of the hooks of the launcher.
+  template<class Init,
+           @_process-launcher_@ Launcher = default_process_launcher>
+  concept @_process-initializer_@ = // exposition only
+    requires(Init i, Launcher l, error_code& err) {
+      i.on_setup(l);
+    } ||
+    requires(Init i, Launcher l) {
+      i.on_success(l);
+    } ||
+    requires(Init i, Launcher l) {
+      i.on_error(l, err);
+    };
+
+  // Identifier for a process
+  // Is trivially copyable, and satisfies strict_totally_ordered
+  using pid_type = @_implementation-defined_@;
 
   // Provides a portable, unique handle to an operating system process
-  // Satisfies Movable and Boolean, but not Copyable.
   class process;
 
   // Exception type thrown on error
-  // Can have a filesystem::path attached to it (failing before launch), 
-  // or pid_type (failing after)
+  // Can also have a:
+  //  - fs::path, if failing before launch
+  //  - pid_type, if failing after launch
   class process_error;
-    
-  // Provides initializers for the standard io. 
+
+  // Provides initializers for the standard I/O
   class process_io;
 
-  // Satisfies process_initializer
-  // class environment;  -- from p1275
-  
-  // Satisfies process_initializer
+  // Satisfies process-initializer
+  // From P1275
+  // class environment;
+
+  // Satisfies process-initializer
   class process_limit_handles;
 }
+```
 
-#+END_SRC
+## Class `process`
 
-** Class ~process~
-
-#+BEGIN_SRC c++
-
+```cpp
 namespace std {
   class process {
   public:
-    // Provides access to underlying operating system facilities
-    using native_handle_type = implementation-defined; 
+    using native_handle_type = @_implementation-defined_@; 
+  
+    // An empty process is similar to a default constructed thread. It holds an empty 
+    // handle and is a place holder for a process that is to be launched later.
+    process() = default;
   
     // Construct a child from a property list and launch it.
-    template<process-argument-list R, process_initializer... Inits>
+    template<@_process-argument-list_@ R, @_process-initializer_@... Inits>
     explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
   
     // Construct a child from a property list and launch it with a custom process launcher
-    template<process-argument-list R, process_initializer... Inits,
-             process_launcher Launcher>
+    template<@_process-argument-list_@ R, @_process_initializer_@... Inits,
+             @_process-launcher_@ Launcher>
     explicit process(const filesystem::path& exe,
                      const R& args,
                      Inits&&... inits,
@@ -777,10 +835,8 @@ namespace std {
   
     // Attach to an existing process
     explicit process(const pid_type& pid);
-  
-    // An empty process is similar to a default constructed thread. It holds an empty 
-    // handle and is a place holder for a process that is to be launched later.
-    process() = default;
+
+    // Not copyable
 
     process(process&&) = default;
     process& operator=(process&&) = default;
@@ -836,49 +892,45 @@ namespace std {
     auto async_wait(Executor& ctx, CompletionToken&& token);
   };
 }
+```
 
-#+END_SRC
+## Class `process_error`
 
-** Class ~process_error~
+```cpp
+namespace std {
+  class process_error : public system_error {
+    // filesystem_error can take up to two paths in case of an error
+    // In the same vein, process_error can take a path or a pid
+    process_error(const string& what_arg, error_code ec);
+    process_error(const string& what_arg, 
+                  const filesystem::path& path,
+                  std::error_code ec);
+    process_error(const string& what_arg, 
+                  pid_type pid_arg,
+                  std::error_code ec);
 
-#+BEGIN_SRC c++
+    const filesystem::path& path() const noexcept;
+    pid_type pid() const noexcept;
 
-class process_error : public system_error {
-public:
-  // filesystem_error can take up to two paths in case of an error
-  // In the same vein, process_error can take a path or a pid
-  process_error(const string& what_arg, error_code ec);
-  process_error(const string& what_arg, 
-                const filesystem::path& path,
-                std::error_code ec);
-  process_error(const string& what_arg, 
-                pid_type pid_arg,
-                std::error_code ec);
+    const char* what() const noexcept override;
+  };
+}
+```
 
-  const filesystem::path& path() const noexcept;
-  pid_type pid() const noexcept;
+## Class `process_io`
 
-  const char* what() const noexcept override;
-};
-
-#+END_SRC
-
-** Class ~process_io~
-
-#+BEGIN_SRC c++
-
+```cpp
 namespace std {
   // This class describes I/O redirection for the standard streams (stdin, stdout, stderr).
   // They all are to be set, because Windows either inherits all or all need to be set. 
-  // Satisfies process_initializer
+  // Satisfies process-initializer
   class process_io {
   public:
-    // OS dependent handle type
-    using native_handle = implementation-defined;
+    using native_handle = @_implementation-defined_@;
     
-    using in_default  = implementation-defined;
-    using out_default = implementation-defined;
-    using err_default = implementation-defined;
+    using in_default  = @_implementation-defined_@;
+    using out_default = @_implementation-defined_@;
+    using err_default = @_implementation-defined_@;
 
     template<ProcessReadableStream In = in_default,
              ProcessWritableStream Out = out_default,
@@ -888,20 +940,19 @@ namespace std {
     // Rest is implementation-defined
   };
 }
+```
 
-#+END_SRC
+## Class `process_limit_handles`
 
+This `limit_handles` property sets all properties to be inherited only expcitly.
+It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
 
-** Class ~process_limit_handles~
+Since limit also closes the standard handles unless they are explicitly redirected,
+they can be ignored by `limit_handles`, through passing in `this_process::stdio()`.
 
-This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
-
-Since limit also closes the standard handles unless they are explicitly redirected, they can be ignored by =limit_handles=, through passing in =this_process::stdio()=.
-
-#+BEGIN_SRC c++
-
+```cpp
 namespace std {
-  // Satisfies process_initializer
+  // Satisfies process-initializer
   class process_limit_handles {
   public:
     // Select all the handles that should be inherited even though they are not 
@@ -910,18 +961,16 @@ namespace std {
     process_limit_handles(Handles&&... handles);
   };
 }
+```
 
-#+END_SRC
-
-** Namespace ~this_process~ 
+## Namespace `this_process`
 
 This namespace provides information about the current process.
 
-#+BEGIN_SRC c++
-
+```cpp
 namespace std::this_process {
-  using native_handle_type = implementation-defined;
-  using pid_type = implementation-defined;
+  using pid_type = @_implementation-defined_@;
+  using native_handle_type = @_implementation-defined_@;
   
   // Get the process id of the current process.
   pid_type get_id();
@@ -955,21 +1004,21 @@ namespace std::this_process {
 
   // Note that this might also be a global object, i.e. this is yet to be defined.
   namespace environment {
-    using native_environment_type = implementation-defined;
+    using native_environment_type = @_implementation-defined_@;
     native_environment_type native_environment();
   
     using value_type = entry;
     // Note that Windows uses wchar_t for key_type, the key type should be able to be 
     // constructed from a char* though. So it needs to be similar to filesystem::path
-    using key_type   = implementation-defined; 
-    using pointer    = implementation-defined;
+    using key_type   = @_implementation-defined_@; 
+    using pointer    = @_implementation-defined_@;
     
     value_type  get(const key_type& id);
     void        set(const key_type& id, const value_type& value);
     void      reset(const key_type& id);
   
     // Get all the keys
-    implementation-defined keys() const;
+    @_implementation-defined_@ keys() const;
     
     // Home folder 
     filesystem::path home() const;
@@ -993,7 +1042,7 @@ namespace std::this_process {
     filesystem::path find_executable(const string& name);
     
     struct entry {
-      using value_type = implementation-defined;
+      using value_type = @_implementation-defined_@;
 
       entry();
 
@@ -1025,13 +1074,11 @@ namespace std::this_process {
     };
   }
 }
+```
 
-#+END_SRC
+## Header `<pstream>` Synopsis
 
-** Header ~<pstream>~ Synopsis
-
-#+BEGIN_SRC c++
-
+```cpp
 #include <istream>
 #include <ostream>
 #include <streambuf>
@@ -1072,13 +1119,13 @@ namespace std {
   class async_pipe_write_end;
 
   struct tuple_size<pipe> {
-      constexpr static size_t size = 2;
+    constexpr static size_t size = 2;
   };
   struct tuple_element<0, pipe> {
-      using type = pipe_read_end;
+    using type = pipe_read_end;
   };
   struct tuple_element<1, pipe> {
-      using type = pipe_write_end;
+    using type = pipe_write_end;
   };
 
   template<size_t Index>
@@ -1094,15 +1141,15 @@ namespace std {
 
   template<class CharT, class Traits>
   struct tuple_size<basic_pstream<Char, Traits>> {
-      constexpr static size_t size = 2;
+    constexpr static size_t size = 2;
   };
   template<class CharT, class Traits>
   struct tuple_element<0, basic_pstream<Char, Traits>> {
-      using type = basic_ipstream<CharT, Traits>;
+    using type = basic_ipstream<CharT, Traits>;
   };
   template<class CharT, class Traits>
   struct tuple_element<1, basic_pstream<Char, Traits>> {
-      using type = basic_opstream<CharT, Traits>;
+    using type = basic_opstream<CharT, Traits>;
   };
 
   template<size_t Index, class CharT, class Traits>
@@ -1121,17 +1168,17 @@ namespace std {
   basic_opstream<CharT, Traits> get<1>(basic_pstream<Char, Traits>&&);
 
   struct tuple_size<pipe> {
-      constexpr static size_t size = 2;
+    constexpr static size_t size = 2;
   };
 
   struct tuple_size<async_pipe> {
-      constexpr static size_t size = 2;
+    constexpr static size_t size = 2;
   };
   struct tuple_element<0, async_pipe> {
-      using type = async_pipe_read_end;
+    using type = async_pipe_read_end;
   };
   struct tuple_element<1, async_pipe> {
-      using type = async_pipe_write_end;
+    using type = async_pipe_write_end;
   };
 
   template<size_t Index>
@@ -1145,17 +1192,14 @@ namespace std {
   async_pipe_write_end get<1>(const async_pipe&);
   async_pipe_write_end get<1>(async_pipe&&);
 }
+```
 
-#+END_SRC
+## Classes `pipe_read_end`, `pipe_write_end`, `pipe`
 
-** Classes ~pipe_read_end~, ~pipe_write_end~, ~pipe~ 
-
-#+BEGIN_SRC c++
-
+```cpp
 namespace std {
   class pipe_read_end {
   public:
-
     // Default construct the pipe_end. Will not be opened.
     pipe_read_end();
 
@@ -1179,7 +1223,6 @@ namespace std {
 
   class pipe_write_end {
   public:
-
     // Default construct the pipe_end. Will not be opened.
     pipe_write_end();
 
@@ -1204,7 +1247,7 @@ namespace std {
 
   class pipe {
   public:
-    // Default construct the pipe. Will be opened.
+    // Default construct the pipe. Will not be opened.
     pipe();
 
     pipe(const pipe_read_end& read_end, const pipe_write_end& write_end);
@@ -1238,13 +1281,11 @@ namespace std {
     void close();
   };
 }
+```
 
-#+END_SRC
+## Class templates `basic_pipebuf`, `basic_opstream`, `basic_ipstream`, `basic_pstream`
 
-** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ 
-
-#+BEGIN_SRC c++
-
+```cpp
 namespace std {
   template<class CharT, class Traits = char_traits<CharT>>
   struct basic_pipebuf : basic_streambuf<CharT, Traits> {
@@ -1254,9 +1295,9 @@ namespace std {
     using pos_type = typename Traits::pos_type;
     using off_type = typename Traits::off_type;
 
-    constexpr static int default_buffer_size = implementation-defined;
+    constexpr static int default_buffer_size = @_implementation-defined_@;
 
-    // Default constructor, will also construct the pipe.
+    // Default constructor, will not construct the pipe.
     basic_pipebuf();
     basic_pipebuf(const basic_pipebuf&) = default;
     basic_pipebuf(basic_pipebuf&&) = default;
@@ -1455,34 +1496,32 @@ namespace std {
     void close();
   };
 }
-
-#+END_SRC
+```
 
 The structure of the streams reflects the ~pipe_end~ distinction of ~pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
 
-#+BEGIN_SRC c++
+```cpp
 std::ipstream is; // Not opened
 std::opstream os{is.open()}; // Now is & os point to the same pipe
-#+END_SRC
+```
 
 Or using aggregate initialization:
 
-#+BEGIN_SRC c++
+```cpp
 auto [is, os] = std::pstream();
-#+END_SRC
+```
 
 Or to be used in a process
 
-#+BEGIN_SRC c++
+```cpp
 std::ipstream is; // Not opened
 std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be read from is
-#+END_SRC
+```
 
-** Classes ~async_pipe_read_end~, ~async_pipe_write_end~, ~async_pipe~ 
+## Classes `async_pipe_read_end`, `async_pipe_write_end`, `async_pipe`
 
-#+BEGIN_SRC c++
-
-// The following is dependent on the networking TS
+```cpp
+// The following is dependent on the Networking TS
 namespace std {
   class async_pipe_read_end {
   public:
@@ -1531,7 +1570,7 @@ namespace std {
     // Start an asynchronous read
     template<class MutableBufferSequence,
              class ReadHandler>
-    implementation-defined async_read_some(
+    @_implementation-defined_@ async_read_some(
         const MutableBufferSequence& buffers,
               ReadHandler&& handler);
   };
@@ -1581,7 +1620,7 @@ namespace std {
     // Start an asynchronous write
     template<class ConstBufferSequence,
              class WriteHandler>
-    implementation-defined async_write_some(
+    @_implementation-defined_@ async_write_some(
         const ConstBufferSequence& buffers,
         WriteHandler&& handler);
   };
@@ -1590,7 +1629,6 @@ namespace std {
   // Can be used directly with net::async_read/write
   class async_pipe {
   public:
-
     // Construct a new async_pipe
     // Automatically opens the pipe
     // Initializes source and sink with the same net::Executor
@@ -1656,73 +1694,108 @@ namespace std {
     // Start an asynchronous read
     template<class MutableBufferSequence,
              class ReadHandler>
-    implementation-defined async_read_some(
+    @_implementation-defined_@ async_read_some(
         const MutableBufferSequence& buffers,
         ReadHandler&& handler);
 
     // Start an asynchronous write
     template<class ConstBufferSequence,
              class WriteHandler>
-    implementation-defined async_write_some(
+    @_implementation-defined_@ async_write_some(
         const ConstBufferSequence& buffers,
         WriteHandler&& handler);
   };
-};
 }
+```
 
-#+END_SRC
+`async_pipe` is structured similar to the `pipe` triple. The `async_pipe_end*::open` returns a `pipe_end_*` to the other side. This allows to use it in a process or to construct an opposite async_pipe:
 
-~async_pipe~ is structured similar to the ~pipe~ triple. The ~async_pipe_end*::open~ returns a ~pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
-
-#+BEGIN_SRC c++
-
+```cpp
 std::net::system_executor exec;
 std::async_pipe_read_end ip{exec}; // Not opened
 // After next line ip & op point to the same pipe, though can use different executors.
 std::async_pipe_read_end op{exec, ip.open()}; 
-
-#+END_SRC
+```
 
 Or using aggregate initialization:
 
-#+BEGIN_SRC c++
-
+```cpp
 std::net::system_executor exec;
 auto [ip, op] = std::async_pipe(exec);
-
-#+END_SRC
+```
 
 Or to be used in a process
 
-#+BEGIN_SRC c++
-
+```cpp
 std::net::system_executor exec;
 std::async_pipe_read_end ip{exec}; 
 std::process proc("foo", std::process_io({}, ip.open(), {}));
+```
 
-#+END_SRC
+# Open question {#open-q}
 
-* Open Questions
-** Splitting pipes out 
-In Cologne both LEWGI and SG1 discussed if pipes should be part of a different stand alone proposal. This does not appear to be such an easy task from the authors view since pipes are quite fundamental to the proposal.  Also pipes got changed as part of the SG16 review.  As a result, they remain in this paper for at least one more round of discussion.
+## Splitting pipes out
 
-** Elimination of ~async_pipe~
-There was a suggestion of a technique to eliminate the ~async_pipe~ while maintaining the functions through streams.  The authors need to followup on this suggested design change.
+In Cologne, both LEWGI and SG1 discussed, if pipes should be part of a different standalone proposal.
+This does not appear to be such an easy task from the authors view, since pipes are quite fundamental to the proposal.
+Also, pipes got changed as part of the SG16 review.
+As a result, they remain in this paper for at least one more round of discussion.
 
-* Acknowledgements
+## Elimination of `async_pipe`
 
-This proposal reflects the effort of the C++ community at C++Now 2019 and afterward. The primary participants are listed as authors on the paper, but many others participated in discussion of details during morning workshop sessions and conference breaks.  
+There was a suggestion of a technique to eliminate the `async_pipe` while maintaining the functions through streams.
+The authors need to followup on this suggested design change.
 
-None of this would have been possible without the work and guidance of Klemens Morgenstern, author of boost.process. 
+# Acknowledgements
 
-* References
-+ Github repository for this proposal https://github.com/JeffGarland/liaw2019-process
-+ Additional user examples not included in the proposal https://github.com/JeffGarland/liaw2019-process/tree/master/example
-+ An online html version of this proposal is at https://github.com/JeffGarland/liaw2019-process/blob/master/process_proposal.org
-+ Isabella Muerte Desert Sessions: Improving hostile environment interactions http://wg21.link/p1275
-+ boost.process documentation https://www.boost.org/libs/process 
-+ Standard Library wishlist (Matt Austern) https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
-+ cppcast with Klemens on boost.process https://channel9.msdn.com/Shows/CppCast/Episode-72-BoostProcess-with-Klemens-Morgenstern
-+ Pacific C++ Klemens on boost.process design https://www.youtube.com/watch?v=uZ4IG1OfeR0
-+ ACE Process library documentation http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html
+This proposal reflects the effort of the C++ community at C++Now 2019 and afterward.
+The primary participants are listed as authors on the paper,
+but many others participated in discussion of details during morning workshop sessions and conference breaks.  
 
+None of this would have been possible without the work and guidance of Klemens Morgenstern, author of Boost.Process. 
+
+---
+references:
+ - id: repo
+   citation-label: "GitHub repository"
+   title: "JeffGarland/liaw2019-process -- GitHub"
+   URL: https://github.com/JeffGarland/liaw2019-process
+ - id: examples
+   citation-label: Examples
+   title: "Additional user examples not included in the proposal"
+   URL: https://github.com/JeffGarland/liaw2019-process/tree/master/example
+ - id: boost.process
+   citation-label: "Boost.Process documentation"
+   title: "Boost.Process documentation"
+   author:
+    - family: Morgenstern
+      given: Klemens
+   URL: https://www.boost.org/libs/process
+ - id: wishlist
+   citation-label: wishlist
+   title: "Standard library wishlist"
+   author:
+    - family: Austern
+      given: Matt
+   URL: https://docs.google.com/document/d/1AC3vkOgFezPaeSZO-fvxgwzEIabw8I_seE7yFG_16Bk/preview
+ - id: ACE
+   citation-label: "ACE::Process"
+   title: "ACE::Process library documentation"
+   URL: http://www.dre.vanderbilt.edu/Doxygen/Stable/libace-doc/a06768.html
+ - id: Qt
+   citation-label: "QProcess"
+   title: "QProcess documentation"
+   URL: https://example.com
+ - id: GNOME
+   citation-label: "glib::spawn"
+   title: "GNOME glib::spawn documentation"
+   URL: https://example.com
+ - id: cpp-subprocess
+   citation-label: cpp-subprocess
+   title: "cpp-subprocess repository"
+   URL: https://example.com
+ - id: reproc
+   citation-label: reproc 
+   title: "reproc repository"
+   URL: https://example.com
+---
