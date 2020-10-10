@@ -767,6 +767,36 @@ namespace std {
     template<process-argument-list R, process_initializer... Inits>
     explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
   
+    // Construct a child from a property list 
+    template<process_initializer... Inits>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::string_view> args, Inits&&... inits);
+
+    // Construct a child from a property list 
+    template<process_initializer... Inits>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::wstring_view> args, Inits&&... inits);
+
+    // Construct a child from a property list and launch it.
+    template<process-argument-list R, process_initializer... Inits>
+    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
+
+    // Construct a child from a property list and launch it with a custom process launcher
+    template<process_initializer... Inits,
+             process_launcher Launcher>
+    explicit process(const filesystem::path& exe,
+                     std::initializer_list<std::wstring_view> args,
+                     Inits&&... inits,
+                     Launcher&& launcher);
+
+    // Construct a child from a property list and launch it with a custom process launcher
+    template<process_initializer... Inits,
+             process_launcher Launcher>
+    explicit process(const filesystem::path& exe,
+                     std::initializer_list<std::wstring_view> args,
+                     Inits&&... inits,
+                     Launcher&& launcher);
+
+
+
     // Construct a child from a property list and launch it with a custom process launcher
     template<process-argument-list R, process_initializer... Inits,
              process_launcher Launcher>
