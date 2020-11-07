@@ -1068,10 +1068,7 @@ namespace std {
 
 ** Class ~process_limit_handles~
 
-This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
-
-Since limit also closes the standard handles unless they are explicitly redirected, passing in ~process_io{}~ would avoid them being closed when using ~limit_fd~.
-
+This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows. The stanrdard handles are exempted from this.
 #+BEGIN_SRC c++
 
 namespace std {
