@@ -531,7 +531,7 @@ struct process_io_traits;
 
 #+END_SRC
 
-A type ~T~ will be considered a readable stream (i.e. a stream that can be used for ~stdin~) if ~process_io_traits~ has a static member function ~get_readable_handle(T)~ that returns a type convertible to ~process_io_traits<>::native_stream_handle~. A writeable stream (i.e. ~stdout~ and ~stderr~) shall have a ~process_io_traits<T>::get_writeable_handle~ function.
+A type ~T~ will be considered a readable stream (i.e. a stream that can be used for ~stdin~) if ~process_io_traits~ has a static member function ~get_readable_handle(T)~ that returns a type convertible to ~process_io_traits<>::native_stream_handle~. A writable stream (i.e. ~stdout~ and ~stderr~) shall have a ~process_io_traits<T>::get_writable_handle~ function.
 
 
 *** Using FILE*
@@ -546,7 +546,7 @@ template<>
 struct process_io_traits<FILE*> 
 {
     static auto get_readable_handle(FILE* f) {return fileno(f);}
-    static auto get_writeable_handle(FILE* f) {return fileno(f);}
+    static auto get_writable_handle(FILE* f) {return fileno(f);}
 };
 
 #+END_SRC
@@ -749,13 +749,13 @@ namespace std {
     { process_io_traits<std::remove_reference_t<T>>{}.get_readable_handle(a) } -> std::convertible_to<typename process_io<>::native_stream_handle>;
   };
 
-  // Concept of a writeable stream, just for readability.
-  concept process-writeable-stream = requires(T a) {
-    { process_io_traits<std::remove_reference_t<T>>{}.get_writeable_handle(a) } -> std::convertible_to<typename process_io<>::native_stream_handle>;
+  // Concept of a writable stream, just for readability.
+  concept process-writable-stream = requires(T a) {
+    { process_io_traits<std::remove_reference_t<T>>{}.get_writable_handle(a) } -> std::convertible_to<typename process_io<>::native_stream_handle>;
   };
 
   // Trait class to make IO extensible.
-  template<process-readable-stream In, process-writeable-stream Out, process-writeable-stream Err>
+  template<process-readable-stream In, process-writable-stream Out, process-writable-stream Err>
   struct process_io;
 
   // Satisfies process_initializer
@@ -908,7 +908,7 @@ namespace std {
   // This class describes I/O redirection for the standard streams (stdin, stdout, stderr).
   // They all are to be set, because Windows either inherits all or all need to be set. 
   // Satisfies process_initializer
-  template<process-readable-stream In = implementation-defined, process-writeable-stream Out = implementation-defined, process-writeable-stream Err = implementation-defined>
+  template<process-readable-stream In = implementation-defined, process-writable-stream Out = implementation-defined, process-writable-stream Err = implementation-defined>
   struct process_io {
     // OS dependent handle type
     using native_stream_handle = implementation-defined;
