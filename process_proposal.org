@@ -549,8 +549,6 @@ struct process_io_traits<FILE*>
     static auto get_writeable_handle(FILE* f) {return fileno(f);}
 };
 
-Because
-
 #+END_SRC
 
 *** Using files
