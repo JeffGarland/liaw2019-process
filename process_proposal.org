@@ -619,6 +619,19 @@ With an environment library like P1275R0 it could be use like this:
 std::process proc{"/bin/bash", {}, std::process_env{std::environment}};
 #+END_SRC
 
+Similarly the constructors shall accept iterator pairs.
+
+For convenience there will also be overloads of `initializer_list` so that the following usage is also possible. 
+
+#+BEGIN_SRC c++
+
+std::process proc{"/bin/bash", {}, std::process_env{"VARIABLE=42", "VAR1=12"}};
+std::process proc1{"/bin/bash", {}, std::process_env{{"VARIABLE", "42"}, {"VAR", "12"}}};
+std::process proc2{"/bin/bash", {}, std::process_env{{"VARIABLE", {"42"}}, {"PATH", {"/usr/bin", "/bin"}}}};
+
+#+END_SRC
+
+
 * Design Decisions
 ** Namespace std versus std::process
 
@@ -929,141 +942,78 @@ namespace std {
 #+BEGIN_SRC c++
 namespace std {
 
-  // This class sets the environment for the child environment.
-  // 
-  class process_env {
-    public:
-    //string range
-    template<ranges::range R>
-        requires (
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<   string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<  wstring_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to< u8string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<u16string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<u32string_view>;}
-            )
-    process_env(R && r);
+// This class is just for readability
+template<typename T>
+concept convertible-to-string-view = 
+        convertible_to<T,    string_view> ||  convertible_to<T,   wstring_view> || convertible_to<T,  u8string_view> || convertible_to<T, u16string_view> || convertible_to<T, u32string_view> ;
 
-    //string range to be converted with the given locale.
-    template<ranges::range R>
-        requires (
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<   string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<  wstring_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to< u8string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<u16string_view>;} ||
-            requires(ranges::range_value_t<R> r) {{r} -> convertible_to<u32string_view>;}
-            )
-    process_env(R && r, const std::locale & loc);
-
-
-    //string pair range
-    template<ranges::range T>
-        requires (
-        requires(ranges::range_value_t<T> r) 
+// This class sets the environment for the child environment.
+// 
+template<typename T>
+    requires convertible-to-string-view<T> || 
+        (requires (T t)
         {
-        {tuple_size<ranges::range_value_t<T>>{}} -> convertible_to<integral_constant<std::size_t,2u>>;
-        }          
-        &&
-         (
-             requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<   string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<  wstring_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to< u8string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u16string_view>;}        
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u32string_view>;}
-         )
-         && (
-             requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<   string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<  wstring_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to< u8string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<u16string_view>;}        
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<u32string_view>;}
-         )         
-        )
-    process_env(T && r);
-
-    //string pair range with locale
-    template<ranges::range T>
-        requires (
-        requires(ranges::range_value_t<T> r) 
+            {tuple_size<T>{}} -> convertible_to<integral_constant<size_t,2u>>;
+            {get<0>(t)} -> convertible-to-string-view;
+            {get<1>(t)} -> convertible-to-string-view;
+        } || 
+        requires (T t)
         {
-        {tuple_size<ranges::range_value_t<T>>{}} -> convertible_to<integral_constant<std::size_t,2u>>;
-        }          
-        &&
-         (
-             requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<   string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<  wstring_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to< u8string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u16string_view>;}        
-          || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u32string_view>;}
-         )
-         && (
-             requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<   string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<  wstring_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to< u8string_view>;}
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<u16string_view>;}        
-          || requires(ranges::range_value_t<T> t) {{get<1>(t)} -> convertible_to<u32string_view>;}
-         )         
-        )
-    process_env(T && r, const std::locale & loc);
+            {tuple_size<T>{}} -> convertible_to<integral_constant<size_t,2u>>;
+            {get<0>(t)} -> convertible-to-string-view;
+            {get<1>(t)} -> ranges::range;
+            {*ranges::begin(get<1>(t))} -> convertible-to-string-view;
+        })
+class process_env {
+public:
+    process_env(initializer_list<T> r);
+    process_env(initializer_list<T> r, const std::locale & loc);
+
+    template<ranges::range Range>
+        requires(convertible_to<ranges::range_value_t<Range>, T>)
+    process_env(Range r);
+
+    template<ranges::range Range>
+        requires(convertible_to<ranges::range_value_t<Range>, T>)
+    process_env(Range r, const std::locale & loc);
+
+    template<input_iterator InputIt>
+        requires(convertible_to<typename iterator_traits<InputIt>::value_type, T>)
+    process_env(InputIt first, InputIt last);
+
+    template<input_iterator InputIt>
+        requires(convertible_to<typename iterator_traits<InputIt>::value_type, T>)
+    process_env(InputIt first, InputIt last,  const std::locale & loc);
+
+};
 
 
-    //string pair range
-    template<ranges::range T>
-        requires (
-        requires(ranges::range_value_t<T> r) 
-        {
-          {tuple_size<ranges::range_value_t<T>>{}} -> convertible_to<integral_constant<std::size_t,2u>>;
-        } 
-            &&
-        (
-           requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<   string_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<  wstring_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to< u8string_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u16string_view>;}        
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u32string_view>;}
-        )
-      && requires (ranges::range_value_t<T> t) {{get<1>(t)} -> ranges::range;}
-      && (
-           requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<   string_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<  wstring_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to< u8string_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<u16string_view>;}        
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<u32string_view>;}
-        )  
-    ) 
-    process_env(T && t);
+template<ranges::range Range>
+process_env(Range r) -> process_env<ranges::range_value_t<Range>>;
 
-    //string pair range with locale
-    template<ranges::range T>
-        requires (
-        requires(ranges::range_value_t<T> r) 
-        {
-          {tuple_size<ranges::range_value_t<T>>{}} -> convertible_to<integral_constant<std::size_t,2u>>;
-        } 
-            &&
-        (
-           requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<   string_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<  wstring_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to< u8string_view>;}
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u16string_view>;}        
-        || requires(ranges::range_value_t<T> t) {{get<0>(t)} -> convertible_to<u32string_view>;}
-        )
-      && requires (ranges::range_value_t<T> t) {{get<1>(t)} -> ranges::range;}
-      && (
-           requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<   string_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<  wstring_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to< u8string_view>;}
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<u16string_view>;}        
-        || requires(ranges::range_value_t<T> t) {{*ranges::begin(get<1>(t))} -> convertible_to<u32string_view>;}
-        )  
-    ) 
-    process_env(T && t, const std::locale & loc);
+template<ranges::range Range>
+process_env(Range && r, const std::locale & loc)  -> process_env<ranges::range_value_t<Range>>;
 
 
-    // The rest is implementation-defined
-  };
+template<input_iterator InputIt>
+process_env(InputIt first, InputIt last) -> process_env<typename iterator_traits<InputIt>::value_type>;
+
+template<input_iterator InputIt>
+process_env(InputIt first, InputIt last, const std::locale & loc) -> process_env<typename iterator_traits<InputIt>::value_type>;
+
+process_env(initializer_list<pair<   string_view,    string_view>> r) -> process_env<pair<   string_view,    string_view>>;
+process_env(initializer_list<pair<  wstring_view,   wstring_view>> r) -> process_env<pair<  wstring_view,   wstring_view>>;
+process_env(initializer_list<pair< u8string_view,  u8string_view>> r) -> process_env<pair< u8string_view,  u8string_view>>;
+process_env(initializer_list<pair<u16string_view, u16string_view>> r) -> process_env<pair<u16string_view, u16string_view>>;
+process_env(initializer_list<pair<u32string_view, u32string_view>> r) -> process_env<pair<u32string_view, u32string_view>>;
+
+process_env(initializer_list<pair<   string_view, initializer_list<   string_view>>> r) -> process_env<pair<   string_view, initializer_list<   string_view>>>;
+process_env(initializer_list<pair<  wstring_view, initializer_list<  wstring_view>>> r) -> process_env<pair<  wstring_view, initializer_list<  wstring_view>>>;
+process_env(initializer_list<pair< u8string_view, initializer_list< u8string_view>>> r) -> process_env<pair< u8string_view, initializer_list< u8string_view>>>;
+process_env(initializer_list<pair<u16string_view, initializer_list<u16string_view>>> r) -> process_env<pair<u16string_view, initializer_list<u16string_view>>>;
+process_env(initializer_list<pair<u32string_view, initializer_list<u32string_view>>> r) -> process_env<pair<u32string_view, initializer_list<u32string_view>>>;
+
 }
-
 #+END_SRC
 
 ** Class ~process_limit_handles~
