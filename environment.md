@@ -164,6 +164,7 @@ using u16key = basic_key<char16_t>;
 using u32key = basic_key<char32_t>;
 using   wkey = basic_key< wchar_t>;
 
+using basic_key_view = std::basic_string_view<CharT, key_traits<char>>;
 using    key_view = std::basic_string_view<    char, key_traits<char>>;
 using  u8key_view = std::basic_string_view< char8_t, key_traits<char8_t>>;
 using u16key_view = std::basic_string_view<char16_t, key_traits<char16_t>>;
@@ -431,4 +432,3 @@ void add_to_path(std::filesystem::path pt)
     std::env::set({"PATH", values});
 }
 ```
-
