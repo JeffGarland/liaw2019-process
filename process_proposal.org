@@ -592,28 +592,31 @@ If we discount specific values in an environment, the semantics are as follows:
 2. The part before the first `=` is a unique key
 3. The part after the first `=` is the value, that is a `:` (posix) or `;` (windows) seperated list.
 
-With these three characteristics we can define what types are acceptable as an environment to be set by the `process_env`:
+It would be possible to accomodate all those scenarios with complex overloads and helper functions. 
+However, the only real platform-specific is the seperator in a list, while everything else is a standard operation.
 
-1. `range<convertible_to<string_view>>`
-2. `range<convertible_to<pair<string_view, string_view>>`
-3. `range<convertible_to<pair<string_view, range<string_view>>>`
+This the `process_env` shall have this character as `static` member, while `process_env` only accepts ranges of `string_view`. 
+With that a user can build his own lists like so:
 
-This will allow the environment to be used in all of the following ways:
 
 #+BEGIN_SRC c++
 
 std::vector<std::string> list_env;
+list_env.push_back("VARIABLE=42");
+
+std::string path = "PATH=/bin";
+
+std::vector<std::string> paths = {"/usr/bin", "/opt/bin"};
+for (auto p : paths)
+  path += std::process_env<std::string>::list_seperator + p;
+
+list_env.push_back(path);
+
 std::process proc{"/bin/bash", {}, std::process_env{list_env}};
-
-std::map<std::string, std::string> str_map_env;
-std::process proc1{"/bin/bash", {}, std::process_env{str_map_env}};
-
-std::map<std::string, std::vector<std::string>> lst_map_env;
-std::process proc2{"/bin/bash", {}, std::process_env{lst_map_env}};
 
 #+END_SRC
 
-With an environment library like P1275R0 it could be use like this:
+With an environment library like P1275R0 it could be use like this, provided that the `value_type` of the container is convertible to a `string_view`.
 
 #+BEGIN_SRC
 std::process proc{"/bin/bash", {}, std::process_env{std::environment}};
@@ -626,8 +629,6 @@ For convenience there will also be overloads of `initializer_list` so that the f
 #+BEGIN_SRC c++
 
 std::process proc{"/bin/bash", {}, std::process_env{"VARIABLE=42", "VAR1=12"}};
-std::process proc1{"/bin/bash", {}, std::process_env{{"VARIABLE", "42"}, {"VAR", "12"}}};
-std::process proc2{"/bin/bash", {}, std::process_env{{"VARIABLE", {"42"}}, {"PATH", {"/usr/bin", "/bin"}}}};
 
 #+END_SRC
 
@@ -942,30 +943,20 @@ namespace std {
 #+BEGIN_SRC c++
 namespace std {
 
-// This class is just for readability
-template<typename T>
-concept convertible-to-string-view = 
-        convertible_to<T,    string_view> ||  convertible_to<T,   wstring_view> || convertible_to<T,  u8string_view> || convertible_to<T, u16string_view> || convertible_to<T, u32string_view> ;
-
 // This class sets the environment for the child environment.
 // 
 template<typename T>
-    requires convertible-to-string-view<T> || 
-        (requires (T t)
-        {
-            {tuple_size<T>{}} -> convertible_to<integral_constant<size_t,2u>>;
-            {get<0>(t)} -> convertible-to-string-view;
-            {get<1>(t)} -> convertible-to-string-view;
-        } || 
-        requires (T t)
-        {
-            {tuple_size<T>{}} -> convertible_to<integral_constant<size_t,2u>>;
-            {get<0>(t)} -> convertible-to-string-view;
-            {get<1>(t)} -> ranges::range;
-            {*ranges::begin(get<1>(t))} -> convertible-to-string-view;
-        })
+    requires         
+      convertible_to<T,    string_view> ||
+      convertible_to<T,   wstring_view> ||
+      convertible_to<T,  u8string_view> ||
+      convertible_to<T, u16string_view> ||
+      convertible_to<T, u32string_view> 
 class process_env {
 public:
+    using char_type = deduced-from-T;
+    constexpr static char_type list_seperator = implementation-defined;
+
     process_env(initializer_list<T> r);
     process_env(initializer_list<T> r, const std::locale & loc);
 
@@ -984,12 +975,11 @@ public:
     template<input_iterator InputIt>
         requires(convertible_to<typename iterator_traits<InputIt>::value_type, T>)
     process_env(InputIt first, InputIt last,  const std::locale & loc);
-
 };
 
 
 template<ranges::range Range>
-process_env(Range r) -> process_env<ranges::range_value_t<Range>>;
+process_env(Range && r) -> process_env<ranges::range_value_t<Range>>;
 
 template<ranges::range Range>
 process_env(Range && r, const std::locale & loc)  -> process_env<ranges::range_value_t<Range>>;
@@ -1000,18 +990,6 @@ process_env(InputIt first, InputIt last) -> process_env<typename iterator_traits
 
 template<input_iterator InputIt>
 process_env(InputIt first, InputIt last, const std::locale & loc) -> process_env<typename iterator_traits<InputIt>::value_type>;
-
-process_env(initializer_list<pair<   string_view,    string_view>> r) -> process_env<pair<   string_view,    string_view>>;
-process_env(initializer_list<pair<  wstring_view,   wstring_view>> r) -> process_env<pair<  wstring_view,   wstring_view>>;
-process_env(initializer_list<pair< u8string_view,  u8string_view>> r) -> process_env<pair< u8string_view,  u8string_view>>;
-process_env(initializer_list<pair<u16string_view, u16string_view>> r) -> process_env<pair<u16string_view, u16string_view>>;
-process_env(initializer_list<pair<u32string_view, u32string_view>> r) -> process_env<pair<u32string_view, u32string_view>>;
-
-process_env(initializer_list<pair<   string_view, initializer_list<   string_view>>> r) -> process_env<pair<   string_view, initializer_list<   string_view>>>;
-process_env(initializer_list<pair<  wstring_view, initializer_list<  wstring_view>>> r) -> process_env<pair<  wstring_view, initializer_list<  wstring_view>>>;
-process_env(initializer_list<pair< u8string_view, initializer_list< u8string_view>>> r) -> process_env<pair< u8string_view, initializer_list< u8string_view>>>;
-process_env(initializer_list<pair<u16string_view, initializer_list<u16string_view>>> r) -> process_env<pair<u16string_view, initializer_list<u16string_view>>>;
-process_env(initializer_list<pair<u32string_view, initializer_list<u32string_view>>> r) -> process_env<pair<u32string_view, initializer_list<u32string_view>>>;
 
 }
 #+END_SRC
