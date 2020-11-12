@@ -13,6 +13,12 @@
 #+Email: jeff@crystalclearsoftware.com
 
 * Revision History
+** R2
+
++   Removed pipes
++   Removed environment in ~this_process~
++   Removed environment stdio ~this_process~
+
 ** R1
 +   Added a section of review questions and dicussion to record committee discussions - see Committee Questions and Discussions
 +   LEWGI feedback: removed ~environment~ class
@@ -61,14 +67,14 @@ int main() {
   std::vector<std::string> args { "--version", "--std=c++2a" };
 
   try {
-    std::ipstream pipe_stream;
+    auto tmp = std::filesystem::temp_directory_path() / "test-thingy";
 
     // Capture stdout, leave the others as the OS defaults
-    std::process child("/usr/bin/g++", args, std::process_io({}, pipe_stream, {})); 
+    std::process child("/usr/bin/g++", args, std::process_io({}, tmp, {})); 
 
     std::string line;
-
-    while (pipe_stream && std::getline(pipe_stream, line) && !line.empty()) {
+    std::ifstream fstr{tmp};
+    while (fstr && std::getline(fstr, line) && !line.empty()) {
       std::cerr << line << std::endl;
     }
     child.wait();
@@ -292,6 +298,10 @@ process_make_ret make_process(...) {
 }
 #+END_SRC
 
+** Splitting pipes out 
+In Cologne both LEWGI and SG1 discussed if pipes should be part of a different stand alone proposal. This did not appear to be such an easy task from the authors view since IO with the process is quite fundamental to the proposal. 
+However, since the Networking TS and related papers, are very active development, it seems counter-productive to add other IO objects before common conventions are established. By solving the issue through an extension point in ~process_io_traits~, we can provide a standard process library that can be used with pipes provided by a third library while at the same time propose a pipe library that fully fits in with future developments in IO libraries for C++.
+
 ** ~process~ destructor should not terminate
 
 SG1 in Cologne discussed the behavior of the ~process~ destructor at length.
@@ -305,7 +315,9 @@ The authors would like committee guidance and discussion of some possible option
 - a constructor option to pick from pre-defined behaviors like ~wait~ or ~detach~
 
 Note that calling ~wait~ in the destructor can also cause poor behavior if the child process never exits.
-This, however, is similar to the problem with ~jthread::join~, if the user fails to implement cooperative shutdown logic.
+This, however, is similar to the problem with ~jthread::join~, if the user fails to implement cooperative shutdown logic. 
+
+The problem with a subprocess is however slightly different: the content of a subprocess is beyond the program's control, unlike the code a thread executes. Additionally, there is a way to terminate a child-process reliably on all operating systems, which is not true for threads. Hence this document proposes to terminate running & attached child processes in the destructor.
 
 ** Can ~std::process~ and ~std::thread~ interchangeably be used in generic code?
 
@@ -328,9 +340,12 @@ Some key points included:
 So, at this time, the proposal will say nothing.
 
 * Design Discussion & Examples
+** Naming conventions
+All classes except for ~default_process_launcher~ in this paper carry the prefix ~process_~. This is because ~process~ was chosen as the adequate name for the class, which diverts from ~boost::process~, where ~process~ is the namespace and the class is ~process::child~. Do note however, that there is not technical reason that the prefixed classes couldn't be nested in ~process~, e.g. ~process::io~.
+
 ** Concept ~process_launcher~
 
-The process launcher is a class that implements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
+A process launcher is a class that implements the actual launch of a process. In most cases there are different versions to do this. On Linux for example, ~vfork~ can be required as an alternative for fork on low-memory devices.
 And while POSIX can change a user by utilizing setuid in a ~process_initializer~, Windows requires the invocation of a different function (~CreateProcessAsUserA~).
 
 As an example for Linux:
@@ -395,22 +410,21 @@ std::process proc("/bin/spyware", {}, switch_user{42});
 
 This is the default launching function, and forwards to ~std::default_process_launcher~. Boost.process supports a cmd-style execution (similar to ~std::system~), which we opted to remove from this proposal.
 This is because the syntax obscures what the library actually does, while introducing a security risk (shell injection).
-Instead, we require the actually used (absolute) path of the executable.
-Since it is common to just type a command and expect the shell to search for the executable in the ~PATH~ environment variable, there is a helper function for that, either in the ~std::environment~ class or the ~std::this_process::environment~ namespace.
+Instead, we require the actually used (absolute) path of the executable. To simulate this behavior, an ~environment~ library, which is not part of this paper, would be required. 
 
 #+BEGIN_SRC c++
 
 std::system("git --version"); // Launches to cmd or /bin/sh
 
 std::process("git", {"--version"}); // Throws process_error, exe not found
-std::process(std::this_process::environment::find_executable("git"), {"--version"}); // Finds the exe
+std::process("/usr/bin/git"), {"--version"}); // Works with an absolute path
 
 // Or if we want to run it through the shell, note that /c is Windows specific
-std::process(std::this_process::environment::shell(), {"/c", "git --version"});
+std::process("/bin/bash", {"-c", "git --version"});
 
 #+END_SRC
 
-Another solution is for a user to provide their own ~process_launcher~ as a ~shell_launcher~.
+The process-argument-list is a ~std::ranges::input_range~ of types that can be converted to ~basic_string_view~. In addition, there shall be overloads that accept a ~locale~ after the argument-list that is used for character conversions, similar to the constructor of ~std::filesystem::path~. Addtionally, there shall be explicit overloads using an ~initializer_list<basic_string_view>~ for all explicit aliases of ~basic_string_view~ defined in the standard.
 
 *** Function ~wait~
 
@@ -420,27 +434,37 @@ The wait function waits for a process to exit. When replacing ~std::system~ it c
 
 const auto result_sys = std::system("gcc --version");
 
-std::process proc(std::this_process::environment::find_executable("gcc"), {"--version"});
+std::process proc("/usr/bin/gcc", {"--version"});
 proc.wait();
 const auto result_proc = proc.exit_code();
 
 #+END_SRC
 
-*** Function ~wait_for~
+*** Function ~async_wait~
 
-In case the child process might hang, ~wait_for~ might be used.
+The ~wait_for~ and ~wait_until~ functions of ~boost::process~ have been difficult to implement, because there is no timed wait function in posix. 
+While linux has an extension with ~sigtimedwait~ that can be used for a timed wait, others don't have such facilities. The two options there would be to either have a timer, that interrupts the waiting or to fork a process that waits and triggers the timeout through ~SIGCHLD~. Both of those options obscure the actual implementation. 
+
+Thus it seems like better design, to utilize the upcoming executors for that. In the background they can install a single ~SIGCHLD~ handler to observe it for all processes as is currently done by ~asio::signal_set~. The user then can use a timer provided by the Networking TS to add a timeout.
 
 #+BEGIN_SRC c++
 
-std::process proc(std::this_process::environment::find_executable("python"), {"--version"});
+std::process proc("/bin/python"), {"--version"});
+
+std::io_context ioc;
+std::steady_timer timer{ioc};
+timer.expires_after(std::chrono::seconds(1));
 
 int res = -1;
-if (proc.wait_for(std::chrono::seconds(1))
-  res = proc.exit_code();
-else
-  proc.terminate(); 
+
+timer.async_wait([&](auto ec){ if (proc.running()) {proc.terminate();}})
+proc.async_wait([&](auto ec, int exit_code){if (ec) res = exit_code;});
+
+ioc.run();
 
 #+END_SRC
+
+Thus, this revision of the paper removes ~wait_for~ and ~wait_until~ functions in favor of ~async_wait~.
 
 *** Function ~native_handle~
 
@@ -461,7 +485,7 @@ The exit-code may contain more information on a specific system. Practically thi
 
 #+BEGIN_SRC c++
 
-std::process proc(std::this_process::environment::find_executable("gcc"), {});
+std::process proc("/usr/bin/gcc", {});
 proc.wait();
 const auto exit_code = proc.exit_code(); // Equals to 1, since no input files
 
@@ -470,93 +494,73 @@ const bool exited_normally = WIFEXITED(proc.native_exit_code());
 
 #+END_SRC
 
-*** Function ~async_wait~
-
-To allow asynchronous operations, the process library shall integrate with the networking TS.
-
-#+BEGIN_SRC c++
-
-extern std::net::system_executor exec;
-std::process proc(std::this_environment::find_executable("gcc"), {});
-
-auto fut = proc.async_wait(exec, std::net::use_future_t());
-const bool exit_code = fut.get();
-assert(exit_code == proc.exit_code());
-
-#+END_SRC
+This is fundamentally different between posix & windows. While on posix, the exit-code has two components, windows uses a special value (259) to denote a process that is still active. 
 
 ** Class ~process_io~
 
-~process_io~ takes three standard handles, because of requirements on some operating systems. Either all three are set or all are defaults.
+~process_io~ takes three standard handles, because of requirements on most operating systems. With the second revision, pipes are removed from this paper, so that the io will rely on standardized types of the C++ standard.
 
 The default, of course, is to forward it to ~std*~.
 
-*** Using pipes
+The ~process_io~ should be e template that allows designated initializers to work like this:
 
 #+BEGIN_SRC c++
 
-std::pipe pin, pout, perr;
-std::process proc("foo", {}, std::process_io(pin, pout, perr));
+//Standard forwarding
+std::process proc("foo", {}, std::process_io(stdin, stdout, stderr));
 
-pin.write("bar", 4);
+//Standard forwarding
+std::process proc("foo", {}, std::process_io({.in = stdin,.out = stdout,.err = stderr});
 
 #+END_SRC
 
-Forwarding between processes:
+/Note that ~process_io~ can be extended later, for example to support ~consteval~ IO, as proposed by P2237R0./
+
+To keep this paper focussed, pipes has been removed from this paper. A pipe library can be seperate and more thoroughly based on the concepts of the networking TS and executors once they are finalized. 
+
+Even if pipes were part of this paper, the ~process_io~ facilities should be extensible to user-code. This is a necessity, since the user might bring his own pipe or networking library, which he might want to assign to the standard I/O. E.g. a named pipe server on windows might be used to spawn a process on connect that handles the pipe I/O or an HTTP server might foward it's open TCP socket to a worker process. A popular example of using stdio for this kind of communication is sftp.
+
+In theory, the user could also use the ~native_handle~ in order to use his own types. This is however very error-prone, since this type is commonly an ~int~ or a ~void*~.
+
+In order to implement that, there shall be a template class ~process_io_traits~, that allows for a type to explicitly define how a given type passed to ~process_io~ can be assigned as a stream-handle.
 
 #+BEGIN_SRC c++
 
-std::system("./proc1 | ./proc2");
+template<typename T>
+struct process_io_traits;
 
+#+END_SRC
+
+A type ~T~ will be considered a readable stream (i.e. a stream that can be used for ~stdin~) if ~process_io_traits~ has a static member function ~get_readable_handle(T)~ that returns a type convertible to ~process_io_traits<>::native_stream_handle~. A writable stream (i.e. ~stdout~ and ~stderr~) shall have a ~process_io_traits<T>::get_writable_handle~ function.
+
+
+*** Using FILE*
+
+The ~stdin~, ~stdout~ and ~stderr~ macros expand to an expression that yields a ~FILE*~. Since those are part of the standard already, they should be the supported way to assign ~stderr~ or ~stdout~.
+
+The definition of ~process_io_traits<FILE*>~ might look as follows:
+
+#+BEGIN_SRC c++
+
+template<>
+struct process_io_traits<FILE*> 
 {
-  std::pipe fwd = std::pipe();
-
-  std::process proc1("./proc1", {}, std::process_io({}, fwd, {}));
-  std::process proc2("./proc1", {}, std::process_io(fwd, {}, {}));
-}
+    static auto get_readable_handle(FILE* f) {return fileno(f);}
+    static auto get_writable_handle(FILE* f) {return fileno(f);}
+};
 
 #+END_SRC
-
-You can also use any ~pstream~ type instead.
 
 *** Using files
 
+Beyond ~FILE*~, the library shall support ~std::filesystem::path~, which will open a file for writing or reading. It is implementation defined when the file is exactly opened (e.g. after ~fork~ on posix is allowed).
+
 #+BEGIN_SRC c++
 
-std::filesystem::path log_path = std::this_process::environment::home() / "my_log_file";
-std::system("foo > ~/my_log_file");
+std::filesystem::path log_path = "my_log_file";
+std::system("foo > my_log_file");
 // Equivalent:
-std::process proc("foo", std::process_io({}, log_path, {}));
-
-#+END_SRC
-
-With an extension to fstream:
-
-#+BEGIN_SRC c++
-
-std::ifstream fs{"/my_log_file"};
-std::process proc("./foo", std::process(fs, {}, {});
-
-#+END_SRC
-
-*** ~std::this_process::stdio~
-
-Since ~std::cout~ can be redirected programmatically and has the same type as ~std::cerr~ it does not seem like a proper fit, unless the type is changed 
-
-#+BEGIN_SRC c++
-
-// Redirect stderr to stdout
-std::process proc ("./foo", std::process_io({}, {}, std::this_process::io().stdout());
-
-#+END_SRC
-
-*** Closing streams
-
-A closed stream means that the child process cannot read or write from the stream. That is, an attempt to do so yields an error. This can be done by using ~nullptr~.
-
-#+BEGIN_SRC c++
-
-std::process proc("./foo", std::process_io(nullptr, nullptr, nullptr));
+std::process proc("foo", std::process_io{.out = std::filesystem::path(log_path)}));
 
 #+END_SRC
 
@@ -573,20 +577,61 @@ std::process proc("./server", std::process_io(socket, socket, "log-file"));
 
 #+END_SRC
 
-*** Null device (not yet specified)
+** Class ~process_env~
 
-The null-device is a a feature of both POSIX ("/dev/null") and Windows ("NUL"). It accepts writes, and always returns.
-It might be worth it to consider adding it.
+The big need of environment functions arises on the side of the child process, i.e. when a child queries it's own environment. For example, searching for an executable that emulates the shell behaviour would be quite common for starting processes, but is quite different between platforms:
+
+On windows, a certain file name is search in the ~PATH~ (or ~Path~ sometimes) variable with the addition of the extensions available in ~PATHEXT~. On posix no such extensions exist, thus a function like  ~std::vector<std::filesystem::path> std::this_process::env::find_executable(std::string & name)~. 
+Similarly, one might want to get the default shell of the OS, which on posix is stored in ~SHELL~ while it's deducable through ~windir~ on windows. This could be handled by a ~std::filesystem::path std::this_process::env::shell()~ function.
+
+It is to note however, that this information is queried before process start and thus usually queried from the father environment. Thus adding those specialized functions to an environment that is used to initialize a child process, should be considered of little priority for this library. If another paper does provide such a class, we should support it. By generalizing it with concepts, we can plugin different ~environment~ libraries. By using views, this should be possible with little overhead.
+
+If we discount specific values in an environment, the semantics are as follows:
+
+1. It's a list of strings, in which every string contains at least one `=`
+2. The part before the first `=` is a unique key
+3. The part after the first `=` is the value, that is a `:` (posix) or `;` (windows) seperated list.
+
+It would be possible to accomodate all those scenarios with complex overloads and helper functions. 
+However, the only real platform-specific is the seperator in a list, while everything else is a standard operation.
+
+This the `process_env` shall have this character as `static` member, while `process_env` only accepts ranges of `string_view`. 
+With that a user can build his own lists like so:
+
 
 #+BEGIN_SRC c++
 
-std::system("./foo > /dev/null");
+std::vector<std::string> list_env;
+list_env.push_back("VARIABLE=42");
 
-// Not (yet) part of this paper
-std::process proc("./foo", {}, std::process_io(
-  std::process_io::null(), std::process_io::null(), std::process_io::null()));
+std::string path = "PATH=/bin";
+
+std::vector<std::string> paths = {"/usr/bin", "/opt/bin"};
+for (auto p : paths)
+  path += std::process_env<std::string>::list_seperator + p;
+
+list_env.push_back(path);
+
+std::process proc{"/bin/bash", {}, std::process_env{list_env}};
 
 #+END_SRC
+
+With an environment library like P1275R0 it could be use like this, provided that the `value_type` of the container is convertible to a `string_view`.
+
+#+BEGIN_SRC
+std::process proc{"/bin/bash", {}, std::process_env{std::environment}};
+#+END_SRC
+
+Similarly the constructors shall accept iterator pairs.
+
+For convenience there will also be overloads of `initializer_list` so that the following usage is also possible. 
+
+#+BEGIN_SRC c++
+
+std::process proc{"/bin/bash", {}, std::process_env{"VARIABLE=42", "VAR1=12"}};
+
+#+END_SRC
+
 
 * Design Decisions
 ** Namespace std versus std::process
@@ -618,41 +663,15 @@ The name of the method in ~class process~ was discussed at length.  The name ~jo
 
 The solution provides access to the operating system, like =std::thread=, for programmers who to go beyond the provided facilities.
 
-** Pipe close and EOF
-
-Compared to the ~boost.process~ implementation, this proposal adds classes for different ~pipe_ends~ and uses C++17 aggregate initialization. The reason is that the following behavior is not necessarily intuitive:
-
-#+BEGIN_SRC c++
-
-boost::process::pipe p;
-
-boost::process::child c("foo", boost::process::std_in < p);
-
-#+END_SRC
-
-In boost.process this closes the write end of ~p~, so an ~EOF~ is read from ~p~ when ~c~ exists. In most cases this would be expected behavior, but it is far from obvious. By using two different types this can be made more obvious, especially since aggregate initialization can be used:
-
-#+BEGIN_SRC c++
-
-auto [p_read, p_write] = std::pipe();
-std::process("foo", std::process_io(p_read));
-p_read.close();
-
-p_write.write("data", 5);
-
-#+END_SRC
-
-Note that overloading allows us to either copy or move the pipe, i.e. the given example only moves the handles without duplicating them.
-
 ** Security and User Management Implications
 
-=std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here. A shell might easily still be used by utilizing =std::this_process::environment::shell()=.
+=std::system= is dangerous because of shell injection, which cannot happen with the uninterpreted version that is proposed here.
 
 The standard process library does not touch on user management. As with file level visibility and user access the responsibility for user permissions lies outside the standard. For example, a process could fail to spawn as a result of the user lacking sufficient permissions to create a child process. This would be reflected as ~system_error~. 
 
 ** Extensibility
 
-To be extensible this library uses two concepts: =process_launcher= and =process_initializer=.
+To be extensible this library uses two explicit concepts: =process_launcher= and =process_initializer=.
 
 A =process_launcher= is the actual function creating the process. It can be used to provide platform dependent behavior such as launching a process a new user (Using =CreateProcessAsUser= on Windows) or to use =vfork= on Linux. The vendor can thus just provide a launcher, and the user can then just drop it into their code.
 
@@ -674,10 +693,6 @@ Synchronous process management is prone to potential deadlocks. However used in 
 
 ~boost.process~ is currently integrated with ~boost.asio~ to support asynchronous behaviors. This proposal currently references the Networking TS for this behavior. However, this proposal can be updated to reflect changes to this aspect of the design since the committee is actively working on this design.
 
-** Integration of =iostream= and pipes
-
-Pipes bring their own streams, that can be used within a process (e.g. between threads). Thus the proposal provides header ~pstream~ and the various pipe stream classes as a separate entity. 
-
 * Technical Specification
 
 The following represents a first draft of an annotated technical specification without formal wording. For an initial proposal this is rather extensive, but hopefully clarifies the proposed library scope.
@@ -694,13 +709,15 @@ The following represents a first draft of an annotated technical specification w
 #include <vector>
  
 namespace std {
-  // exposition-only
+  // exposition-only, this concept shall be used as constraints inside the process constructor instead.
   // Command line argument list
   template<ranges::input_range R>
   concept process-argument-list =
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, string> ||
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, wstring> ||
-    requires convertible_to<ranges::iter_value_t<ranges::iterator_t<R>>, u8string>;
+    requires convertible_to<ranges::range_value_t<R>,    string_view> ||
+    requires convertible_to<ranges::range_value_t<R>,   wstring_view> ||
+    requires convertible_to<ranges::range_value_t<R>,  u8string_view> ||
+    requires convertible_to<ranges::range_value_t<R>, u16string_view> ||
+    requires convertible_to<ranges::range_value_t<R>, u32string_view>;
 
   // A launcher is an object that has a launch function that takes a path, 
   // arguments and a variadic list of process initializers and returns a process object. 
@@ -740,15 +757,28 @@ namespace std {
   // Can have a filesystem::path attached to it (failing before launch), 
   // or pid_type (failing after)
   class process_error;
-    
-  // Provides initializers for the standard io. 
-  class process_io;
+
+  // Concept of a readable stream, just for readability.
+  concept process-readable-stream = requires(T a) {
+    { process_io_traits<std::remove_reference_t<T>>{}.get_readable_handle(a) } -> std::convertible_to<typename process_io<>::native_stream_handle>;
+  };
+
+  // Concept of a writable stream, just for readability.
+  concept process-writable-stream = requires(T a) {
+    { process_io_traits<std::remove_reference_t<T>>{}.get_writable_handle(a) } -> std::convertible_to<typename process_io<>::native_stream_handle>;
+  };
+
+  // Trait class to make IO extensible.
+  template<process-readable-stream In, process-writable-stream Out, process-writable-stream Err>
+  struct process_io;
 
   // Satisfies process_initializer
-  // class environment;  -- from p1275
-  
+  class process_env;
   // Satisfies process_initializer
   class process_limit_handles;
+
+  // Satisfies process_initializer
+  class process_start_dir;
 }
 
 #+END_SRC
@@ -764,46 +794,45 @@ namespace std {
     using native_handle_type = implementation-defined; 
   
     // Construct a child from a property list and launch it.
-    template<process-argument-list R, process_initializer... Inits>
-    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
+    template<process-argument-list Args, process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, const Args& args, Inits&&... inits, Launcher && ... launcher = {});
+
+    // Construct a child from a property list and launch it with a custom locale for the character conversions of args.
+    template<process-argument-list Args, process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, const Args& args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
   
-    // Construct a child from a property list 
-    template<process_initializer... Inits>
-    explicit process(const filesystem::path& exe, std::initializer_list<std::string_view> args, Inits&&... inits);
+    // Overload so we can use it like this: process("cmd", {"arg"});
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::string_view> args, Inits&&... inits, Launcher && ... launcher = {});
 
-    // Construct a child from a property list 
-    template<process_initializer... Inits>
-    explicit process(const filesystem::path& exe, std::initializer_list<std::wstring_view> args, Inits&&... inits);
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::wstring_view> args, Inits&&... inits, Launcher && ... launcher = {});
 
-    // Construct a child from a property list and launch it.
-    template<process-argument-list R, process_initializer... Inits>
-    explicit process(const filesystem::path& exe, const R& args, Inits&&... inits);
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u8string_view> args, Inits&&... inits, Launcher && ... launcher = {});
 
-    // Construct a child from a property list and launch it with a custom process launcher
-    template<process_initializer... Inits,
-             process_launcher Launcher>
-    explicit process(const filesystem::path& exe,
-                     std::initializer_list<std::wstring_view> args,
-                     Inits&&... inits,
-                     Launcher&& launcher);
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u16string_view> args, Inits&&... inits, Launcher && ... launcher = {});
 
-    // Construct a child from a property list and launch it with a custom process launcher
-    template<process_initializer... Inits,
-             process_launcher Launcher>
-    explicit process(const filesystem::path& exe,
-                     std::initializer_list<std::wstring_view> args,
-                     Inits&&... inits,
-                     Launcher&& launcher);
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u16string_view> args, Inits&&... inits, Launcher && ... launcher = {});
 
 
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::string_view> args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
 
-    // Construct a child from a property list and launch it with a custom process launcher
-    template<process-argument-list R, process_initializer... Inits,
-             process_launcher Launcher>
-    explicit process(const filesystem::path& exe,
-                     const R& args,
-                     Inits&&... inits,
-                     Launcher&& launcher);
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::wstring_view> args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
+
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u8string_view> args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
+
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u16string_view> args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
+
+    template<process_initializer... Inits, process_launcher Launcher = default_process_launcher>
+    explicit process(const filesystem::path& exe, std::initializer_list<std::u16string_view> args, const std::locale & loc, Inits&&... inits, Launcher && ... launcher = {});
+
   
     // Attach to an existing process
     explicit process(const pid_type& pid);
@@ -851,15 +880,7 @@ namespace std {
   
     // Block until the process to exits 
     void wait();
-  
-    // Block for the process to exit for a period of time.
-    template<class Rep, class Period>
-    bool wait_for(const chrono::duration<Rep, Period>& rel_time);
-  
-    // wait for the process to exit until a point in time.
-    template<class Clock, class Duration>
-    bool wait_until(const chrono::time_point<Clock, Duration>& timeout_time);
-    
+     
     // The following is dependent on the networking TS. CompletionToken has the signature 
     // (int, error_code), i.e. wait for the process to exit and get the exit_code if exited. 
     template<class Executor, class CompletionToken>
@@ -901,33 +922,81 @@ namespace std {
   // This class describes I/O redirection for the standard streams (stdin, stdout, stderr).
   // They all are to be set, because Windows either inherits all or all need to be set. 
   // Satisfies process_initializer
-  class process_io {
-  public:
+  template<process-readable-stream In = implementation-defined, process-writable-stream Out = implementation-defined, process-writable-stream Err = implementation-defined>
+  struct process_io {
     // OS dependent handle type
-    using native_handle = implementation-defined;
-    
-    using in_default  = implementation-defined;
-    using out_default = implementation-defined;
-    using err_default = implementation-defined;
+    using native_stream_handle = implementation-defined;
 
-    template<ProcessReadableStream In = in_default,
-             ProcessWritableStream Out = out_default,
-             ProcessWritableStream Err = err_default> 
-    process_io(In&& in, Out&& out, Err&& err);
+    In  in  = implementation-defined;
+    Out out = implementation-defined;
+    Err err = implementation-defined;    
     
-    // Rest is implementation-defined
+    // The rest is implementation-defined
   };
 }
 
 #+END_SRC
 
 
+** Class ~process_env~
+
+#+BEGIN_SRC c++
+namespace std {
+
+// This class sets the environment for the child environment.
+// 
+template<typename T>
+    requires         
+      convertible_to<T,    string_view> ||
+      convertible_to<T,   wstring_view> ||
+      convertible_to<T,  u8string_view> ||
+      convertible_to<T, u16string_view> ||
+      convertible_to<T, u32string_view> 
+class process_env {
+public:
+    using char_type = deduced-from-T;
+    constexpr static char_type list_seperator = implementation-defined;
+
+    process_env(initializer_list<T> r);
+    process_env(initializer_list<T> r, const std::locale & loc);
+
+    template<ranges::range Range>
+        requires(convertible_to<ranges::range_value_t<Range>, T>)
+    process_env(Range r);
+
+    template<ranges::range Range>
+        requires(convertible_to<ranges::range_value_t<Range>, T>)
+    process_env(Range r, const std::locale & loc);
+
+    template<input_iterator InputIt>
+        requires(convertible_to<typename iterator_traits<InputIt>::value_type, T>)
+    process_env(InputIt first, InputIt last);
+
+    template<input_iterator InputIt>
+        requires(convertible_to<typename iterator_traits<InputIt>::value_type, T>)
+    process_env(InputIt first, InputIt last,  const std::locale & loc);
+};
+
+
+template<ranges::range Range>
+process_env(Range && r) -> process_env<ranges::range_value_t<Range>>;
+
+template<ranges::range Range>
+process_env(Range && r, const std::locale & loc)  -> process_env<ranges::range_value_t<Range>>;
+
+
+template<input_iterator InputIt>
+process_env(InputIt first, InputIt last) -> process_env<typename iterator_traits<InputIt>::value_type>;
+
+template<input_iterator InputIt>
+process_env(InputIt first, InputIt last, const std::locale & loc) -> process_env<typename iterator_traits<InputIt>::value_type>;
+
+}
+#+END_SRC
+
 ** Class ~process_limit_handles~
 
-This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows.
-
-Since limit also closes the standard handles unless they are explicitly redirected, they can be ignored by =limit_handles=, through passing in =this_process::stdio()=.
-
+This =limit_handles= property sets all properties to be inherited only expcitly. It closes all unused file-descriptors on POSIX after the fork and removes the inherit flags on Windows. The stanrdard handles are exempted from this.
 #+BEGIN_SRC c++
 
 namespace std {
@@ -938,6 +1007,22 @@ namespace std {
     // used by any initializer.
     template<class... Handles>
     process_limit_handles(Handles&&... handles);
+  };
+}
+
+#+END_SRC
+
+** Class ~process_start_dir~
+
+#+BEGIN_SRC c++
+
+namespace std {
+  // This class sets the environment for the child environment.
+  // Satisfies process_initializer
+  class process_start_dir {
+      process_start_dir(const std::filesystem::path & start_dir)
+  
+      // The rest is implementation-defined
   };
 }
 
@@ -958,15 +1043,6 @@ namespace std::this_process {
   // Get the native handle of the current process.
   native_handle_type native_handle();
   
-  struct stdio_t {
-    native_handle_type in();
-    native_handle_type out();
-    native_handle_type err();
-  };
-  
-  // Get the handles to the standard streams
-  stdio_t stdio();
-
   // Get a snapshot of all handles of the process (i.e. file descriptors on POSIX 
   // and handles on Windows) of the current process.
   // NOTE: This function might not work on certain POSIX systems.
@@ -982,762 +1058,9 @@ namespace std::this_process {
   // be used with read and write functions.
   // Stream handles include pipes, regular files and sockets.
   bool is_stream_handle(native_handle_type handle);
-
-  // Note that this might also be a global object, i.e. this is yet to be defined.
-  namespace environment {
-    using native_environment_type = implementation-defined;
-    native_environment_type native_environment();
-  
-    using value_type = entry;
-    // Note that Windows uses wchar_t for key_type, the key type should be able to be 
-    // constructed from a char* though. So it needs to be similar to filesystem::path
-    using key_type   = implementation-defined; 
-    using pointer    = implementation-defined;
-    
-    value_type  get(const key_type& id);
-    void        set(const key_type& id, const value_type& value);
-    void      reset(const key_type& id);
-  
-    // Get all the keys
-    implementation-defined keys() const;
-    
-    // Home folder 
-    filesystem::path home() const;
-    // Temporary folder as defined in the env
-    filesystem::path temp() const;
-    
-    // Shell command, see ComSpec for Windows
-    filesystem::path shell() const;
-    
-    // The path variable, parsed.
-    template<ranges::output_iterator It>
-    It path(It it) const;
-    
-    // The path extensions, that mark a file as executable (empty on POSIX)
-    vector<filesystem::path> extensions() const;
-
-    template<ranges::output_iterator It>
-    It extensions(It it) const;
-  
-    // Find an executable file with this name.
-    filesystem::path find_executable(const string& name);
-    
-    struct entry {
-      using value_type = implementation-defined;
-
-      entry();
-
-      entry(string_view);
-      entry(const string&);
-      entry(const wstring&);
-      entry(const vector<value_type>&);
-      template<ranges::input_range Rng>
-        requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
-      entry(const Rng& r);
-
-      entry& operator=(string_view);
-      entry& operator=(const string&);
-      entry& operator=(const wstring&);
-      entry& operator=(const vector<value_type>&);
-      template<ranges::input_range Rng>
-        requires convertible_to<ranges::iter_value_t<ranges::iterator_t<Rng>>, value_type>
-      entry& operator=(const Rng& r);
-      
-      string as_string();
-      wstring as_wstring();
-      value_type as_native_string();
-
-      // Split according to the OS specifics
-      vector<value_type> as_vector();
-
-      template<ranges::output_iterator It>
-      It as_range(It it) const;
-    };
-  }
 }
 
 #+END_SRC
-
-** Header ~<pstream>~ Synopsis
-
-#+BEGIN_SRC c++
-
-#include <istream>
-#include <ostream>
-#include <streambuf>
-#include <net> // Networking TS
-
-namespace std {
-  class pipe_read_end;
-  class pipe_write_end;
-  class pipe;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pipebuf;
-
-  using pipebuf  = basic_pipebuf<char>;
-  using wpipebuf = basic_pipebuf<wchar_t>;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_ipstream;
-
-  using ipstream = basic_ipstream<char>;
-  using wipstream = basic_ipstream<wchar_t>;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_opstream;
-
-  using opstream = basic_opstream<char>;
-  using wopstream = basic_opstream<wchar_t>;
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pstream;
-
-  using pstream = basic_pstream<char>;
-  using wpstream = basic_pstream<wchar_t>;
-
-  struct tuple_size<pipe> {
-  class async_pipe;
-  class async_pipe_read_end;
-  class async_pipe_write_end;
-
-  struct tuple_size<pipe> {
-      constexpr static size_t size = 2;
-  };
-  struct tuple_element<0, pipe> {
-      using type = pipe_read_end;
-  };
-  struct tuple_element<1, pipe> {
-      using type = pipe_write_end;
-  };
-
-  template<size_t Index>
-  auto get(pipe&&);
-  template<size_t Index>
-  auto get(const pipe&);
-
-  pipe_read_end get<0>(const pipe&);
-  pipe_read_end get<0>(pipe&&);
-
-  pipe_write_end<CharT, Traits> get<1>(const pipe&);
-  pipe_write_end<CharT, Traits> get<1>(pipe&&);
-
-  template<class CharT, class Traits>
-  struct tuple_size<basic_pstream<Char, Traits>> {
-      constexpr static size_t size = 2;
-  };
-  template<class CharT, class Traits>
-  struct tuple_element<0, basic_pstream<Char, Traits>> {
-      using type = basic_ipstream<CharT, Traits>;
-  };
-  template<class CharT, class Traits>
-  struct tuple_element<1, basic_pstream<Char, Traits>> {
-      using type = basic_opstream<CharT, Traits>;
-  };
-
-  template<size_t Index, class CharT, class Traits>
-  auto get(basic_pstream<Char, Traits>&&);
-  template<size_t Index, class CharT, class Traits>
-  auto get(const basic_pstream<Char, Traits>&);
-
-  template<class CharT, class Traits>
-  basic_ipstream<CharT, Traits> get<0>(const basic_pstream<Char, Traits>&);
-  template<class CharT, class Traits>
-  basic_ipstream<CharT, Traits> get<0>(basic_pstream<Char, Traits>&&);
-
-  template<class CharT, class Traits>
-  basic_opstream<CharT, Traits> get<1>(const basic_pstream<Char, Traits>&);
-  template<class CharT, class Traits>
-  basic_opstream<CharT, Traits> get<1>(basic_pstream<Char, Traits>&&);
-
-  struct tuple_size<pipe> {
-      constexpr static size_t size = 2;
-  };
-
-  struct tuple_size<async_pipe> {
-      constexpr static size_t size = 2;
-  };
-  struct tuple_element<0, async_pipe> {
-      using type = async_pipe_read_end;
-  };
-  struct tuple_element<1, async_pipe> {
-      using type = async_pipe_write_end;
-  };
-
-  template<size_t Index>
-  auto get(const async_pipe&);
-  template<size_t Index>
-  auto get(async_pipe&&);
-
-  async_pipe_read_end get<0>(const async_pipe&);
-  async_pipe_read_end get<0>(async_pipe&&);
-
-  async_pipe_write_end get<1>(const async_pipe&);
-  async_pipe_write_end get<1>(async_pipe&&);
-}
-
-#+END_SRC
-
-** Classes ~pipe_read_end~, ~pipe_write_end~, ~pipe~ 
-
-#+BEGIN_SRC c++
-
-namespace std {
-  class pipe_read_end {
-  public:
-
-    // Default construct the pipe_end. Will not be opened.
-    pipe_read_end();
-
-    pipe_read_end(const pipe_read_end& p);
-    pipe_read_end(pipe_read_end&& lhs);
-
-    pipe_read_end& operator=(const pipe_read_end& p);
-    pipe_read_end& operator=(pipe_read_end&& lhs);
-
-    // Destructor closes the handles
-    ~pipe_read_end();
-
-    // Read data from the pipe.
-    size_t read(span<byte> data);
-    
-    // Check if the pipe is open.
-    bool is_open();
-    // Close the pipe
-    void close();
-  };
-
-  class pipe_write_end {
-  public:
-
-    // Default construct the pipe_end. Will not be opened.
-    pipe_write_end();
-
-    pipe_write_end(const pipe_write_end& p);
-    pipe_write_end(pipe_write_end&& lhs);
-
-    pipe_write_end& operator=(const pipe_write_end& p);
-    pipe_write_end& operator=(pipe_write_end&& lhs);
-
-    // Destructor closes the handles.
-    ~pipe_write_end();
-
-    // Write data to the pipe.
-    size_t write(span<const byte> data);
-    
-    // Check if the pipe is open.
-    bool is_open();
-
-    // Close the pipe
-    void close();
-  };
-
-  class pipe {
-  public:
-    // Default construct the pipe. Will be opened.
-    pipe();
-
-    pipe(const pipe_read_end& read_end, const pipe_write_end& write_end);
-    pipe(pipe_read_end&& read_end, pipe_write_end&& write_end);
-
-    // Construct a named pipe.
-    explicit pipe(const filesystem::path& name);
-
-    pipe(pipe&& lhs);
-    pipe& operator=(pipe&& lhs);
-
-    // Destructor closes the handles
-    ~pipe();
-
-    pipe_write_end& write_end() &;
-    pipe_write_end&& write_end() &&;
-    const pipe_write_end& write_end() const &;
-
-    pipe_read_end& read_end() &;
-    pipe_read_end&& read_end() &&;
-    const pipe_read_end& read_end() const &;
-
-    // Write data to the pipe
-    size_t write(span<const byte> data);
-    // Read data from the pipe
-    size_t read(span<byte> data);
-
-    // Check if the pipe is open
-    bool is_open();
-    // Close the pipe
-    void close();
-  };
-}
-
-#+END_SRC
-
-** Class templates ~basic_pipebuf~, ~basic_opstream~, ~basic_ipstream~ and ~basic_pstream~ 
-
-#+BEGIN_SRC c++
-
-namespace std {
-  template<class CharT, class Traits = char_traits<CharT>>
-  struct basic_pipebuf : basic_streambuf<CharT, Traits> {
-    usign char_type = CharT;
-    using traits_type = Traits;
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
-
-    constexpr static int default_buffer_size = implementation-defined;
-
-    // Default constructor, will also construct the pipe.
-    basic_pipebuf();
-    basic_pipebuf(const basic_pipebuf&) = default;
-    basic_pipebuf(basic_pipebuf&&) = default;
-
-    basic_pipebuf(const basic_pipebuf&) = default;
-    basic_pipebuf(basic_pipebuf&&) = default;
-
-    basic_pipebuf& operator=(const basic_pipebuf&) = delete;
-    basic_pipebuf& operator=(basic_pipebuf&&) = default;
-
-    // Destructor writes the rest of the data
-    ~basic_pipebuf();
-
-    // Construct/assign from a pipe
-    basic_pipebuf(const pipe& p);
-    basic_pipebuf(pipe& p);
-
-    basic_pipebuf& operator=(pipe&& p);
-    basic_pipebuf& operator=(const pipe& p);
-    
-    // Write characters to the associated output sequence from the put area
-    int_type overflow(int_type ch = traits_type::eof()) override;
-    
-    // Synchronize the buffers with the associated character sequence
-    int sync() override;
-
-    // Reads characters from the associated input sequence to the get area
-    int_type underflow() override;
-    
-    // Set the pipe of the streambuf
-    void pipe(const pipe_type& p);
-    void pipe(pipe_type&& p);
-
-    // Get a reference to the pipe
-    pipe_type&       pipe() &;
-    const pipe_type& pipe() const &;
-    pipe_type&&      pipe() &&;
-
-    // Check if the pipe is open
-    bool is_open() const;
-
-    // Open a new pipe
-    basic_pipebuf<CharT, Traits>* open();
-
-    // Open a new named pipe
-    basic_pipebuf<CharT, Traits>* open(const filesystem::path& name);
-
-    // Flush the buffer and close the pipe
-    basic_pipebuf<CharT, Traits>* close();
-  };
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_ipstream : public basic_istream<CharT, Traits> {
-  public:
-    using pipe_end_type = pipe_read_end;
-    using opposite_pipe_end_type = pipe_write_end;
-
-    using char_type = CharT;
-    using traits_type = Traits;
-
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
-
-    // Get access to the underlying streambuf
-    basic_pipebuf<CharT, Traits>* rdbuf() const;
-
-    basic_ipstream();
-
-    basic_ipstream(const basic_ipstream&) = delete;
-    basic_ipstream(basic_ipstream&& lhs);
-
-    basic_ipstream& operator=(const basic_ipstream&) = delete;
-    basic_ipstream& operator=(basic_ipstream&& lhs);
-
-    // Construct/assign from a pipe
-    basic_ipstream(const pipe_type& p);
-    basic_ipstream(pipe_type&& p);
-
-    basic_ipstream& operator=(const pipe_type& p);
-    basic_ipstream& operator=(pipe_type&& p);
-
-    // Set the pipe of the streambuf
-    void pipe_end(const pipe_end_type& p);
-    void pipe_end(pipe_end_type&& p);
-
-    // Get a reference to the pipe
-    pipe_end_type& pipe_end() &;
-    const pipe_end_type& pipe_end() const&;
-    pipe_end_type&& pipe_end() &&;
-
-    // Check if the pipe is open
-    bool is_open() const;
-
-    // Open a new pipe
-    opposite_pipe_end_type open();
-
-    // Open a new named pipe
-    opposite_pipe_end_type open(const filesystem::path& name);
-
-    // Flush the buffer and close the pipe
-    void close();
-  };
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_opstream : public basic_ostream<CharT, Traits> {
-  public:
-    using pipe_end_type = pipe_write_end;
-    using opposite_pipe_end_type = pipe_read_end;
-
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
-
-    // Get access to the underlying streambuf
-    basic_pipebuf<CharT, Traits>* rdbuf() const;
-
-    basic_opstream();
-    
-    basic_opstream(const basic_opstream&) = delete;
-    basic_opstream(basic_opstream&& lhs);
-
-    basic_opstream& operator=(const basic_opstream&) = delete;
-    basic_opstream& operator=(basic_opstream&& lhs);
-    
-    // Construct/assign from a pipe
-    basic_opstream(const pipe_end_type& p);
-    basic_opstream(pipe_end_type&& p);
-
-    basic_opstream& operator=(const pipe_end_type& p);
-    basic_opstream& operator=(pipe_end_type&& p);
-    
-    // Set the pipe_end
-    void pipe_end(pipe_end_type&& p);
-    void pipe_end(const pipe_end_type& p);
-
-    // Get the pipe_end
-    pipe_end_type&       pipe_end() &;
-    const pipe_end_type& pipe_end() const&;
-    pipe_end_type&&      pipe_end() &&;
-
-    // Open a new pipe
-    opposite_pipe_end_type open();
-    // Open a new named pipe
-    opposite_pipe_end_type open(const filesystem::path& name);
-
-    // Flush the buffer & close the pipe
-    void close();
-  };
-
-  template<class CharT, class Traits = char_traits<CharT>>
-  class basic_pstream : public basic_iostream<CharT, Traits> {
-    mutable basic_pipebuf<CharT, Traits> _buf; // exposition-only
-  public:
-    using char_type   = CharT;
-    using traits_type = Traits;
-
-    using int_type = typename Traits::int_type;
-    using pos_type = typename Traits::pos_type;
-    using off_type = typename Traits::off_type;
-
-    // Get access to the underlying streambuf
-    basic_pipebuf<CharT, Traits>* rdbuf() const;
-
-    basic_pstream();
-    
-    basic_pstream(const basic_pstream&) = delete;
-    basic_pstream(basic_pstream&& lhs);
-    
-    basic_pstream& operator=(const basic_pstream&) = delete;
-    basic_pstream& operator=(basic_pstream&& lhs);
-
-    // Construct/assign from a pipe
-    basic_pstream(const pipe& p);
-    basic_pstream(pipe&& p);
-    
-    basic_pstream& operator=(const pipe& p);
-    basic_pstream& operator=(pipe&& p);
-    
-    // Set the pipe of the streambuf
-    void pipe(const pipe& p);
-    void pipe(pipe&& p);
-
-    // Get a reference to the pipe.
-    pipe_type&       pipe() &;
-    const pipe_type& pipe() const &;
-    pipe_type&&      pipe() &&;
-
-    // Open a new pipe
-    void open();
-
-    // Open a new named pipe
-    void open(const filesystem::path& name);
-
-    // Flush the buffer & close the pipe
-    void close();
-  };
-}
-
-#+END_SRC
-
-The structure of the streams reflects the ~pipe_end~ distinction of ~pipe~. Additionally, the open function on the ~ipstream~ / ~opstream~ allows to open a full pipe and be handled by another class, e.g.:
-
-#+BEGIN_SRC c++
-std::ipstream is; // Not opened
-std::opstream os{is.open()}; // Now is & os point to the same pipe
-#+END_SRC
-
-Or using aggregate initialization:
-
-#+BEGIN_SRC c++
-auto [is, os] = std::pstream();
-#+END_SRC
-
-Or to be used in a process
-
-#+BEGIN_SRC c++
-std::ipstream is; // Not opened
-std::process proc("foo", std::process_io({}, is.open(), {})); // stdout can be read from is
-#+END_SRC
-
-** Classes ~async_pipe_read_end~, ~async_pipe_write_end~, ~async_pipe~ 
-
-#+BEGIN_SRC c++
-
-// The following is dependent on the networking TS
-namespace std {
-  class async_pipe_read_end {
-  public:
-    template<class Executor>
-    async_pipe_read_end(Executor& ios);
-
-    async_pipe_read_end(const async_pipe_read_end& lhs);
-    async_pipe_read_end(async_pipe_read_end&& lhs);
-
-    async_pipe_read_end& operator=(const async_pipe_read_end& lhs);
-    async_pipe_read_end& operator=(async_pipe_read_end&& lhs);
-
-    // Construct form pipe_end
-    template<class Executor>
-    explicit async_pipe_read_end(Executor& ios, 
-                                 const pipe_read_end& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    inline async_pipe_read_end& operator=(const pipe_read_end& p);
-
-    // Destructor closes the pipe handles
-    ~async_pipe_read_end();
-
-    // Explicit conversion operator to pipe_read_end
-    explicit operator pipe_read_end() const;
-    
-    pipe_write_end<CharT, Traits> open();
-    pipe_write_end<CharT, Traits> open(const filesystem::path& path);
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    void close();
-
-    // Check if the pipe end is open
-    bool is_open() const;
-
-
-    // Read some data from the handle.
-    // See the Networking TS for more details.
-    template<class MutableBufferSequence>
-    size_t read_some(const MutableBufferSequence& buffers);
-
-    // Note: MutableBufferSequence is span<span<byte>>
-    // Start an asynchronous read
-    template<class MutableBufferSequence,
-             class ReadHandler>
-    implementation-defined async_read_some(
-        const MutableBufferSequence& buffers,
-              ReadHandler&& handler);
-  };
-
-  class async_pipe_write_end {
-  public:
-    template<class Executor>
-    async_pipe_write_end(Executor& ios);
-
-    async_pipe_write_end(const async_pipe_write_end& lhs);
-    async_pipe_write_end(async_pipe_write_end&& lhs);
-
-    async_pipe_write_end& operator=(const async_pipe_write_end& lhs);
-    async_pipe_write_end& operator=(async_pipe_write_end&& lhs);
-
-    // Construct from pipe_end
-    template<class Executor>
-    explicit async_pipe_write_end(Executor& ios, 
-                                  const pipe_write_end& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    async_pipe_write_end& operator=(const pipe_write_end<& p);
-
-    // Destructor closes the pipe handles
-    ~async_pipe_write_end();
-
-    // Explicit conversion operator to pipe_write_end
-    explicit operator pipe_write_end() const;
-    
-    // Open the pipe
-    pipe_read_end open();
-    pipe_read_end open(const filesystem::path& path);
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    void close();
-
-    // Check if the pipe end is open
-    bool is_open() const;
-
-    // Write some data to the handle
-    template<class ConstBufferSequence>
-    size_t write_some(const ConstBufferSequence& buffers);
-    
-    // Start an asynchronous write
-    template<class ConstBufferSequence,
-             class WriteHandler>
-    implementation-defined async_write_some(
-        const ConstBufferSequence& buffers,
-        WriteHandler&& handler);
-  };
-
-  // Class for async I/O with the Networking TS
-  // Can be used directly with net::async_read/write
-  class async_pipe {
-  public:
-
-    // Construct a new async_pipe
-    // Automatically opens the pipe
-    // Initializes source and sink with the same net::Executor
-    // NOTE: Windows creates a named pipe here, where the name is automatically generated.
-    template<class Executor>
-    async_pipe(Executor& ios);
-
-    // NOTE: Windows restricts possible names
-    template<class Executor>
-    async_pipe(Executor& ios, const filesystem::path& name);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    async_pipe(const async_pipe& lhs);
-    async_pipe(async_pipe&& lhs);
-
-    async_pipe& operator=(const async_pipe& lhs);
-    async_pipe& operator=(async_pipe&& lhs);
-
-    // Construct from a pipe
-    // @note Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    template<class Executor>
-    explicit async_pipe(Executor& ios, const pipe& p);
-
-    // NOTE: Windows requires a named pipe for this, if a the wrong type is used an 
-    // exception is thrown.
-    async_pipe& operator=(const pipe& p);
-
-    // Returns a copied pipe read end
-    const async_pipe_read_end&  read_end() const &;
-          async_pipe_read_end&& read_end() &&;
-
-    // Returns a copied pipe write end
-    const async_pipe_write_end&  write_end() const &;
-          async_pipe_write_end&& write_end() &&;
-
-    // Destructor, closes the pipe handles
-    ~async_pipe();
-
-    // Explicit conversion operator to pipe
-    explicit operator pipe() const;
-
-    // Cancel the current asynchronous operations
-    void cancel();
-
-    // Close the pipe handles
-    void close();
-
-    // Check if the pipes are open
-    bool is_open() const;
-
-    // Read some data from the handle.
-    // See the Networking TS for more details.
-    template<class MutableBufferSequence>
-    size_t read_some(const MutableBufferSequence& buffers);
-
-    // Write some data to the handle.
-    // See the Networking TS for more details.
-    template<class ConstBufferSequence>
-    size_t write_some(const ConstBufferSequence& buffers);
-
-    // Start an asynchronous read
-    template<class MutableBufferSequence,
-             class ReadHandler>
-    implementation-defined async_read_some(
-        const MutableBufferSequence& buffers,
-        ReadHandler&& handler);
-
-    // Start an asynchronous write
-    template<class ConstBufferSequence,
-             class WriteHandler>
-    implementation-defined async_write_some(
-        const ConstBufferSequence& buffers,
-        WriteHandler&& handler);
-  };
-};
-}
-
-#+END_SRC
-
-~async_pipe~ is structured similar to the ~pipe~ triple. The ~async_pipe_end*::open~ returns a ~pipe_end_*~ to the other side. This allows to use it in a process or to construct an opposite async_pipe:
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-std::async_pipe_read_end ip{exec}; // Not opened
-// After next line ip & op point to the same pipe, though can use different executors.
-std::async_pipe_read_end op{exec, ip.open()}; 
-
-#+END_SRC
-
-Or using aggregate initialization:
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-auto [ip, op] = std::async_pipe(exec);
-
-#+END_SRC
-
-Or to be used in a process
-
-#+BEGIN_SRC c++
-
-std::net::system_executor exec;
-std::async_pipe_read_end ip{exec}; 
-std::process proc("foo", std::process_io({}, ip.open(), {}));
-
-#+END_SRC
-
-* Open Questions
-** Splitting pipes out 
-In Cologne both LEWGI and SG1 discussed if pipes should be part of a different stand alone proposal. This does not appear to be such an easy task from the authors view since pipes are quite fundamental to the proposal.  Also pipes got changed as part of the SG16 review.  As a result, they remain in this paper for at least one more round of discussion.
-
-** Elimination of ~async_pipe~
-There was a suggestion of a technique to eliminate the ~async_pipe~ while maintaining the functions through streams.  The authors need to followup on this suggested design change.
 
 * Acknowledgements
 
